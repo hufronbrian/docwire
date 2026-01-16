@@ -1,0 +1,982 @@
+=d=meta=w=
+=dw=
+=#= docwire tracked file | edit content below =o=
+=x= file;|./docwire.txt|; =z=
+=x= version;|av1r1|; =z=
+=x= log;|./.dw/loc/docwire.txt|; =z=
+=x= update;|2026-01-16T10:42:00Z|; =z=
+=x= refs;|./dwchecklist.txt|;,;|./dwguide.txt|; =z=
+=wd=
+=q=meta=e=
+
+DOCWIRE - AI-Age Versioning System
+
+===
+PROBLEM
+
+LLMs spend lots of context tracking doc versions, cross-references, and what needs updating.
+Manual VERSION HISTORY in each .txt works but doesn't scale.
+No tool exists for plain .txt with version tracking.
+Git is overkill for docs - too many commands, manual commits, whole-repo focus.
+
+===
+CONCEPT
+
+DocWire = next-gen versioning for docs.
+Zero-command workflow: save = auto-diff, copy = branch, watcher handles everything.
+
+Core principle:
+- .txt = pure text, no syntax rules, human writes freely
+- DWML header + loc/*.txt = meta + history (readable, can recreate full file)
+- Single watcher daemon (no per-file workers)
+- docwire CLI = minimal commands, watcher does the work
+
+Why it's different:
+- Git: manual add, commit, push, branch, merge (50+ commands)
+- DocWire: init, start, bump, done (watcher handles rest)
+
+| | Git | DocWire |
+|---|---|---|
+| Track changes | Manual (git add) | Auto on save |
+| Commit | Manual (git commit) | dw bump (or auto on dw start) |
+| Message | You write it | Auto-generated diff |
+| Scope | Whole repo | Per file |
+| Branch | git branch + checkout | Just copy the .txt file |
+| Merge | git merge (conflicts) | Paste back, delete copy |
+| New files | git add needed | Auto-detected by watcher |
+| Learning curve | High | Almost none |
+
+===
+INSTALL STRUCTURE
+
+docwire/                        <- clone/download this repo
+  install.ps1                     <- Windows installer
+  install.sh                      <- Linux/Mac/WSL installer
+  uninstall.ps1                   <- Windows uninstaller
+  uninstall.sh                    <- Linux/Mac/WSL uninstaller
+  README.md                       <- GitHub readme
+  docs/                           <- documentation
+    docwire.txt
+    dwchecklist.txt
+    dwguide.txt
+  win/                            <- Windows version
+    dw.bat                          <- launcher
+    dwroot.py                       <- entry point
+    template/                       <- scripts (copied by dw setup)
+      cor/cli.py, utils.py, head.py, diff.py, bump.py,
+      watch.py, sync.py, fix.py, archive.py, compact.py, dwml.py
+      config.txt
+  unx/                            <- Linux/Mac/WSL version
+    dw                              <- launcher + entry point (python script)
+    template/                       <- scripts (same as win)
+
+---
+Install Flow
+
+1. Clone and install:
+
+   git clone https://github.com/hufronbrian/docwire
+   cd docwire
+
+   Windows (PowerShell):
+   .\install.ps1
+   -> copies win/ to C:\Users\{user}\bin\docwire\
+   -> adds to PATH
+
+   Linux/Mac/WSL:
+   chmod +x install.sh
+   ./install.sh
+   -> copies unx/ to ~/.local/bin/docwire/
+   -> adds to PATH in .bashrc/.zshrc
+
+2. Restart terminal, then 'dw' command works globally
+
+3. Per-folder setup:
+   cd my-docs/
+   dw setup
+   -> copies template/ to current folder as .dw/
+   -> if .dw/ exists: "Already setup. Use 'dw setup remove'"
+
+4. Remove setup (optional):
+   dw setup remove
+   -> deletes .dw/ folder and all history
+   -> prompts for confirmation
+
+5. Initialize:
+   dw init
+   -> adds =d=meta=w= headers to all .txt
+   -> creates snp/, loc/ files
+
+---
+Uninstall
+
+Windows:
+.\uninstall.ps1
+
+Linux/Mac/WSL:
+./uninstall.sh
+
+===
+FILE STRUCTURE
+
+After setup, your docs folder looks like:
+
+docs/
+  .dw/                        <- scripts + data
+    config.txt                  <- settings, ignore patterns
+    index.txt                   <- master list of tracked docs
+	
+    cor/
+      cli.py                      <- main CLI logic
+      head.py                     <- header management
+      watch.py                    <- file watcher daemon
+      bump.py                     <- version bumping
+      diff.py                     <- diff calculation
+      utils.py                    <- shared helpers
+      sync.py, fix.py, archive.py, compact.py
+
+    glb/                        <- global session logs
+      dw-current.txt              <- active watcher session
+      dw-20260115-100000.txt      <- archived session logs
+
+    snp/                        <- snapshots (last saved state)
+      Dev-ListMap.txt             <- copy for diff calculation
+
+    loc/                        <- per-doc history (diffs + metadata)
+      Dev-ListMap.txt             <- meta + history log
+
+    cmp/                        <- compact summaries
+      Dev-ListMap.txt             <- stats summary
+
+    acv/                        <- archived history
+      Dev-ListMap-20260110.txt    <- old logs
+
+  Dev-ListMap.txt             <- your .txt files with =d=meta=w= header
+  Dev-FlowPwa.txt
+
+Benefits:
+- Self-contained: .dw/ has scripts + data
+- Portable: move folder, everything comes with it
+- Multi-folder: each folder can have own .dw/
+- No global dependencies after install
+- All .txt format (no YAML JSON escaping issues)
+
+Note: DocWire roughly doubles folder size (snp/ copies).
+Best for docs/ folders, not entire codebases.
+
+---
+Why .txt instead of .yml .json?
+- No YAML escaping issues (quotes, colons, special chars)
+- Simple append-only format for history
+- Easy to read/parse
+- No corruption from diff content with special characters
+
+===
+CONFIG (.dw/config.txt)
+
+Settings and ignore patterns:
+
+---
+config.txt format:
+
+=d=config=w=
+=#= docwire configuration =o=
+=x= ignore;|./drafts/*|;,;|./archive/*|;,;|./scratch.txt|;,;|./_*.txt|; =z=
+=x= archive_threshold;|100|; =z=
+=q=config=e=
+
+---
+Ignore Rules
+
+- Glob patterns relative to tracked folder
+- Checked before =d=meta=w= header check
+- Files matching ignore = never tracked
+- Even if file has header, ignore pattern wins
+
+===
+DWML (DontWorry Markup Language) v1.0
+
+Custom markup format for all DocWire data files.
+Safe (no escaping needed), LLM-friendly, human readable.
+"DontWorry" - no escaping needed, don't worry about special characters.
+
+---
+Block Tags (open/close)
+
+=d=name=w= ... =q=name=e=
+
+| Block | Purpose |
+|-------|---------|
+| =d=meta=w= ... =q=meta=e= | Metadata block |
+| =d=history=w= ... =q=history=e= | History block |
+| =d=config=w= ... =q=config=e= | Config block |
+
+---
+Inline Tags
+
+| Tag | Purpose |
+|-----|---------|
+| =dw=...=wd= | Container/bracket (like {}) |
+| =x=...=z= | Key-value content |
+| =+=...=o= | Added line (diff) |
+| =-=...=o= | Removed line (diff) |
+| =#=...=o= | Comment (ignored by parser) |
+
+---
+Value Syntax
+
+=x= key;|value|; =z=
+
+- ;| opens value
+- |; closes value
+- , separates multiple values
+
+Examples:
+=x= file;|./doc.txt|; =z=
+=x= tags;|red|;,;|green|;,;|blue|; =z=
+=x= host;|localhost|; port;|5432|; =z=
+
+Why ;| and |; ?
+- Semicolon+pipe combination is extremely rare in normal text
+- Safe for content with pipes, colons, quotes, code, etc.
+
+---
+Why not JSON/YAML?
+- JSON: needs escaping for quotes, not human-readable
+- YAML: tabs break it, colons break it, special chars break it
+- DWML: no escaping, content is safely between tags
+
+===
+USER FILE HEADER
+
+=d=meta=w=
+=dw=
+=#= docwire tracked file =o=
+=x= file;|./filename.txt|; =z=
+=x= version;|av1r1|; =z=
+=x= log;|./.dw/loc/filename.txt|; =z=
+=x= update;|2026-01-15T10:00:00Z|; =z=
+=x= refs;|./other.txt|;,;|./another.txt|; =z=
+=wd=
+=q=meta=e=
+
+===
+HISTORY FORMAT (.dw/loc/*.txt)
+
+Each tracked file has a history log:
+
+---
+loc/Dev-ListMap.txt format:
+
+=d=meta=w=
+=x= file;|./Dev-ListMap.txt|; =z=
+=x= version;|av1r2|; =z=
+=x= saves;|5|; =z=
+=x= updated;|2026-01-15T14:30:00Z|; =z=
+=x= ref_versions;|./other.txt=av1r3|;,;|./another.txt=av1r1|; =z=
+=q=meta=e=
+
+=d=history=w=
+=dw=
+=x= 2026-01-15T14:00:00Z;|initialized|; =z=
+=wd=
+=dw=
+=x= 2026-01-15T14:10:00Z;|save:1|; =z=
+=+= added this line =o=
+=+= another added line =o=
+=+= third line =o=
+=-= removed this line =o=
+=wd=
+=dw=
+=x= 2026-01-15T14:20:00Z;|save:2|; =z=
+=+= one more line =o=
+=wd=
+=dw=
+=x= 2026-01-15T14:30:00Z;|bumped av1r2|; =z=
+=wd=
+=q=history=e=
+
+---
+History entry types:
+- initialized - first tracking
+- save:N - save number N (diff lines follow)
+- bumped avNrN - version bump
+- renamed from -> to - file renamed
+- rebased avX -> bvY - base changed
+- archived to path - history archived
+
+===
+BRANCHING (Zero-Command)
+
+Branching is just copying the .txt file:
+
+docs/
+  Dev-ListMap.txt              <- main (av1r5)
+  Dev-ListMap - copy.txt       <- branch (auto-assigned av2r1)
+  Dev-ListMap - copy 2.txt     <- branch (auto-assigned av3r1)
+
+Watcher auto-creates history and assigns version:
+.dw/loc/
+  Dev-ListMap.txt              <- av1r5
+  Dev-ListMap - copy.txt       <- av2r1 (new major version)
+  Dev-ListMap - copy 2.txt     <- av3r1 (another major)
+
+Merge = paste content back to main .txt, delete copies.
+Main bumps to branch version (av1r5 -> av2r1 on merge).
+
+No branch commands needed. File system IS the branching system!
+
+===
+VERSION FORMAT (avNrN)
+
+Structure: {base}v{major}r{revision}
+
+  a    = base (original line)
+  v1   = major version (increments on merge)
+  r1   = revision (increments on dw bump or dw start)
+
+Internal only (in loc/*.txt metadata, never shown in user file):
+  s    = saves count (increments on each save)
+
+Displayed version (in .txt header):
+  av1r2 (no s shown)
+
+Examples:
+  av1r1  = original base, no merges, first revision
+  av1r5  = original base, no merges, 5th revision
+  av2r1  = merged once (from copy), first revision after merge
+  av3r2  = merged twice, 2nd revision
+  bv1r1  = rebased to new base (manual), fresh start
+
+---
+When Version Increments
+
+Save (s - internal only):
+  - User saves file -> s increments in loc/*.txt metadata
+  - Diff logged to loc/*.txt history block
+  - snp/ updated with current content
+  - Version string unchanged (av1r1 stays av1r1)
+
+Bump (r - visible):
+  - Triggered by: dw bump (manual) or dw start (auto)
+  - Checks all loc/*.txt for unbumped saves (s > 0)
+  - If unbumped: av1r1 -> av1r2, s resets to 0
+  - If no saves since last bump: r stays same
+  - Represents a revision boundary
+
+Merge (v - visible):
+  - Branch content pasted back to main -> v increments
+  - av1r5 -> av2r1
+  - Represents branch merged
+
+Rebase (base - visible):
+  - User manually changes base letter -> new base
+  - av3r5 -> bv1r1
+  - Represents intentional new direction
+
+---
+Auto Version Flow
+
+1. Main file at av1r5
+2. User copies -> watcher assigns av2r1 to copy
+3. User edits copy, runs dw bump -> av2r2, av2r3...
+4. User pastes copy content back to main
+5. Watcher detects merge -> main bumps to av2r1
+6. User copies again -> watcher assigns av3r1
+7. Merge again -> main becomes av3r1
+
+History shows merge events in loc/*.txt using DWML format.
+
+---
+Manual Rebase (Changing Base)
+
+User manually changes version in .txt header:
+  =x= version;|av3r5|; =z=  ->  =x= version;|bv1r1|; =z=
+
+This signals intentional rebase/split:
+- New base letter = fresh start
+- History preserved but new direction
+
+Version evolution example:
+
+av1r1 -> av1r2 -> av1r3 (normal bumps)
+                      |
+                      v
+                   av2r1 (copy merged back)
+                      |
+                      v
+               av2r2 -> av2r3 (more bumps)
+                           |
+                           v
+                        bv1r1 (manual rebase - new direction!)
+
+The version string tells the full story:
+- r increment = revision boundary (dw bump)
+- v increment = branch merged
+- base change = intentional rebase
+
+===
+FILE RECONSTRUCTION
+
+The loc/*.txt contains full history of added/removed lines in DWML format.
+Can recreate the entire file from history alone:
+
+dw reconstruct <file>
+  - Replays all history entries
+  - Rebuilds .txt from scratch
+  - Useful for recovery if .txt deleted
+
+This means loc/*.txt is the source of truth!
+
+===
+ENTERPRISE MODE (Remote + Gating) - Future
+
+For teams with multiple contributors:
+
+=d=config=w=
+=x= remote_path;|/remote/docwire-central/projectA/|; =z=
+=x= push_gate;|approval_required|; =z=
+=x= contributors;|vee|;,;|claude|; =z=
+=q=config=e=
+
+Workflow:
+1. User saves -> changes go to local temp first
+2. dw push -> sends changes to remote loc/
+3. Gate checks (approval from other contributor?)
+4. Approved -> merged to remote/loc/
+5. Others run dw pull -> get updates
+
+Like git push/pull but:
+- DWML is readable (not binary)
+- Can recreate files from history
+- Per-file granularity
+- Auto-tracking still works
+
+Benefits:
+- Centralized history on secure drive
+- Push gating for review
+- Audit compliance
+- Full reconstruction from loc/*.txt
+
+===
+TRACK COMMAND
+
+dw track <file>
+  - Show history for file (read-only view)
+  - Example: dw track Dev-ListMap.txt
+
+dw track -l <file>
+  - Show full loc file content (metadata + history)
+
+dw track -t <file>
+  - Show .txt content (the doc itself)
+
+dw track -a <file>
+  - Show paths of all related files
+  - Example output:
+    txt: /docs/Dev-ListMap.txt
+    loc: /docs/.dw/loc/Dev-ListMap.txt
+    snp: /docs/.dw/snp/Dev-ListMap.txt
+
+===
+GLOBAL LOGS (.dw/glb/)
+
+Session event logs - one file per dw start/stop cycle:
+
+---
+glb/dw-current.txt (active session)
+
+=d=meta=w=
+=x= started;|2026-01-15T10:00:00Z|; =z=
+=x= pid;|12345|; =z=
+=q=meta=e=
+
+=d=history=w=
+=dw=
+=x= 2026-01-15T10:05:00Z;|saved ./Dev-ListMap.txt|; =z=
+=wd=
+=dw=
+=x= 2026-01-15T10:10:00Z;|created ./Dev-NewDoc.txt|; =z=
+=wd=
+=dw=
+=x= 2026-01-15T11:00:00Z;|bumped 3 files|; =z=
+=wd=
+=q=history=e=
+
+---
+Flow:
+- dw start -> creates glb/dw-current.txt
+- watcher logs events to dw-current.txt
+- dw stop -> renames to glb/dw-{timestamp}.txt
+
+Archived logs:
+  glb/dw-20260115-100000.txt
+  glb/dw-20260115-140000.txt
+  glb/dw-20260116-090000.txt
+
+===
+DW HEADER FORMAT
+
+Header block delimited by =d=meta=w= (open) and =q=meta=e= (close).
+Presence means file is tracked. No header = auto-ignored by watcher.
+
+---
+Example:
+
+=d=meta=w=
+=dw=
+=#= docwire tracked file =o=
+=x= file;|./Dev-ListMap.txt|; =z=
+=x= version;|av1r11|; =z=
+=x= log;|./.dw/loc/Dev-ListMap.txt|; =z=
+=x= update;|2026-01-13T14:40:00Z|; =z=
+=x= refs;|./Dev-FlowPwa.txt|;,;|./Dev-ListVersion.txt|; =z=
+=wd=
+=q=meta=e=
+
+BOQPAD DEV DOCUMENTATION INDEX MAP
+=== DOCUMENT CONTENT
+... rest of doc ...
+
+---
+Header Fields
+
+file
+  - Self-reference path (./filename.txt)
+  - Auto-set by dw init or dw head
+  - Helps detect if file was renamed
+
+version
+  - Current version (avNrN format)
+  - Auto-set on init (av1r1)
+  - Auto-updated on bump
+  - Manual change of base (a->b) triggers rebase
+
+log
+  - Path to history file (loc/*.txt)
+  - Auto-set on init
+
+update
+  - Last save timestamp (ISO format)
+  - Auto-updated by watcher on every save
+
+refs
+  - Referenced docs, comma separated
+  - Manual (user adds/removes)
+  - Used for staleness tracking
+
+---
+Tracking Rules
+
+1. Check config.txt ignore patterns first
+2. If not ignored, check for =d=meta=w=...=q=meta=e= header block
+3. Has header block = tracked by watcher
+4. No header = auto-ignored
+
+---
+Commands
+
+dw init
+  - Adds =d=meta=w=...=q=meta=e= header to all .txt files
+  - Skips files matching ignore patterns
+
+dw head -f <file>
+  - Manually add header to specific file
+
+Remove =d=meta=w=...=q=meta=e= block = stop tracking that file
+
+===
+LOC FILE FORMAT
+
+One .txt per tracked file in loc/:
+
+---
+loc/Dev-ListMap.txt
+
+=d=meta=w=
+=x= file;|./Dev-ListMap.txt|; =z=
+=x= version;|av1r11|; =z=
+=x= saves;|5|; =z=
+=x= updated;|2026-01-15T14:40:00Z|; =z=
+=x= ref_versions;|./Dev-FlowPwa.txt=av1r3|;,;|./Dev-ListVersion.txt=av1r1|; =z=
+=q=meta=e=
+
+=d=history=w=
+=dw=
+=x= 2026-01-15T14:35:00Z;|save:1|; =z=
+=+= - Dev-FlowIdp.txt =o=
+=+= - Dev-FlowPwa.txt =o=
+=wd=
+=dw=
+=x= 2026-01-15T14:40:00Z;|save:2|; =z=
+=+= av1r11 =o=
+=-= av1r10 =o=
+=wd=
+=dw=
+=x= 2026-01-15T15:00:00Z;|bumped av1r12|; =z=
+=wd=
+=q=history=e=
+
+---
+cmp/Dev-ListMap.txt (generated by dw compact)
+
+=d=meta=w=
+=x= file;|./Dev-ListMap.txt|; =z=
+=x= generated;|2026-01-15T09:00:00Z|; =z=
+=x= range;|av1r8|;,;|av1r11|; =z=
+=x= entries;|45|; =z=
+=x= saves;|45|; added;|234|; removed;|89|; =z=
+=q=meta=e=
+
+---
+How Diff is Calculated
+
+On save, watcher:
+1. Reads ./Dev-ListMap.txt (current)
+2. Reads snp/Dev-ListMap.txt (previous snapshot)
+3. Uses difflib to find added/removed lines
+4. Appends diff to loc/Dev-ListMap.txt, s++
+5. Overwrites snp/Dev-ListMap.txt with current
+
+===
+FILE WATCHER (Single Daemon)
+
+Single watcher daemon handles all file events.
+Each doc is its own mini repo with auto-diff on save.
+
+Watched events (what watchdog can detect):
+- modified: file saved
+- created: new .txt file
+- deleted: file removed
+- moved: file renamed or moved
+
+Note: watchdog cannot detect file open/close, only file system changes.
+
+---
+Watcher Flow
+
+1. dw init
+   -> copies all .txt to snp/ (initial snapshots)
+   -> creates loc/*.txt for each (empty history, DWML format)
+   -> parses header, sets initial version
+
+2. User saves file
+   -> watcher detects file modify
+   -> parses header from current file
+   -> checks for rebase (base letter changed a->b?)
+      -> if rebase: archive loc/*.txt to acv/, create fresh loc/*.txt
+   -> reads snp/*.txt (snapshot)
+   -> calculates diff (added/removed lines)
+   -> appends diff to loc/*.txt history block, s++
+   -> overwrites snp/*.txt with current
+   -> logs event to glb/dw-current.txt
+
+3. User creates new file
+   -> watcher detects file create
+   -> adds header, copies to snp/
+   -> creates loc/*.txt with version av1r1
+
+4. User renames file
+   -> watcher detects move/rename
+   -> renames snp/*.txt
+   -> renames loc/*.txt
+   -> logs rename in history
+
+5. dw bump (or dw start)
+   -> checks all loc/*.txt for saves > 0
+   -> bumps r, resets s to 0 for each
+   -> updates version in .txt header
+   -> logs bump event
+
+---
+Rebase Detection
+
+When watcher detects base letter change in version:
+
+1. User manually edits: =x= version;|av3r5|; =z= -> =x= version;|bv1r1|; =z=
+2. Watcher reads header on save
+3. Compares with version in loc/*.txt
+4. Base changed (a->b):
+   -> moves loc/*.txt to acv/*-{timestamp}.txt
+   -> creates fresh loc/*.txt with version bv1r1
+   -> logs rebased event
+
+---
+Like git but:
+- No add command needed (save = auto-diff)
+- dw bump = commit (revision boundary)
+- Per-file history (each doc is own repo)
+- Tracks renames/moves
+- Fully automatic
+
+===
+CLI COMMANDS
+
+---
+Setup Commands
+
+dw setup
+  - Copy .dw/ template from docwire repo to current folder
+  - Run once per docs folder
+  - If .dw/ exists: "Already setup. Use 'dw setup remove'"
+
+dw setup remove
+  - Delete .dw/ folder and all history
+  - Prompts: "This will delete .dw/ and all history. Are you sure? [y/N]"
+
+---
+Core Commands (Phase 1 MVP)
+
+dw init
+  - Add =d=meta=w=...=q=meta=e= headers to all .txt files
+  - Copy all .txt to snp/ (initial snapshots)
+  - Create loc/*.txt for each (empty history, DWML format)
+  - Update index.txt
+
+dw start
+  - Check if watcher already running (PID file)
+  - If running: prompt [1] Keep / [2] Restart / [3] Stop
+  - Auto-bumps r for any unbumped saves
+  - Starts file watcher daemon
+  - Watches for save/create/rename events
+
+dw stop
+  - Stop watcher daemon
+  - Rename dw-current.txt to dw-{timestamp}.txt
+  - No auto-bump on stop (crash-safe design)
+
+dw bump
+  - Manually bump r for all docs with unbumped saves
+  - Checks all loc/*.txt for saves > 0
+  - If unbumped: increments r, resets s to 0
+  - Updates version in .txt header
+
+dw bump -f <file>
+  - Bump specific file only
+
+dw status
+  - Show watcher status (running/stopped)
+  - Show total tracked docs
+  - Show docs with unbumped saves
+
+dw track <file>
+  - Show history for file
+  - -l flag: show full loc file content
+  - -t flag: show .txt content
+  - -a flag: show all paths (txt, loc, snp)
+
+dw head -f <file>
+  - Add =d=meta=w=...=q=meta=e= header to specific file
+
+---
+Smart Commands (Phase 2)
+
+dw sync
+  - Parse all .txt files for header fields
+  - Extract version, refs from content
+  - Update all loc/*.txt metadata
+  - Rebuild index.txt
+  - Auto-runs on dw start (before auto-bump)
+
+dw fix
+  - Scan and show issues with tags:
+    [AF] LARGE - history too big (auto-fixable via archive)
+    [AF] ORPHAN - loc exists but .txt deleted (auto-fixable via delete)
+    [MF] STALE - refs have updates since last save (manual fix)
+    [MF] BROKEN - refs to non-existent docs (manual fix)
+  - Prompts: Auto-fix now? [y/n]
+  - y = auto-fix AF items, skip MF items
+  - n = report only
+
+dw fix -y
+  - Auto-fix without prompt (for scripts)
+
+dw fix -n
+  - Report only, no prompt (for scripts)
+
+dw compact
+  - Generate cmp/*.txt with stats (DWML format)
+  - Stats: total saves, total bumps, line changes, date range
+
+dw archive
+  - Move loc/*.txt history to acv/{stem}-{timestamp}.txt
+  - Reset loc/*.txt to metadata only
+  - Update archive refs in loc/*.txt
+  - Threshold: 100 entries (configurable in config.txt)
+
+dw archive -f <file>
+  - Archive specific file only
+
+---
+Advanced Commands (Phase 3)
+
+dw log <file>
+  - Pretty print save history
+
+dw diff <file>
+  - Show changes since last bump
+
+dw revert <file> <n>
+  - Restore content from n saves ago
+
+dw graph
+  - Generate relationship map (mermaid or ASCII)
+
+===
+EXAMPLE OUTPUT
+
+$ dw fix
+
+=== SCAN RESULTS
+
+[AF] LARGE Dev-Map.txt - 150 entries
+[AF] ORPHAN Dev-Old.txt - no source .txt found
+[MF] STALE Dev-Flow.txt - refs changed: Dev-Pwa.txt
+[MF] BROKEN Dev-Admin.txt:45 - ref Dev-Role.txt not found
+
+---
+Auto-fixable [AF]: 2
+Manual fix [MF]: 2
+
+Auto-fix now? [y/n]: y
+
+[FIXED] Dev-Map.txt - archived
+[FIXED] Dev-Old.txt - deleted
+
+Done. 2 fixed, 2 need manual attention.
+
+===
+USE CASES
+
+1. LLM-assisted workflows
+   - LLM reads dw fix output
+   - Knows exactly what to update without reading all docs
+   - Saves context tokens
+
+2. Solo devs with lots of .txt docs
+   - Track relationships without complex tools
+   - CLI-first, no app needed
+
+3. Teams
+   - See what docs changed per revision
+   - Catch stale docs before they rot
+
+===
+TECH STACK
+
+- Python 3.10+
+- watchdog for file watcher
+- difflib for diff generation
+- All .txt format (no YAML dependency for data files)
+- No external services, fully local
+
+===
+SIMILAR TOOLS (and why DocWire is different)
+
+Obsidian
+  - Graph + backlinks but .md only
+  - Needs app, not CLI
+  - No version parsing
+
+Foam (VS Code)
+  - Similar to Obsidian, .md only
+  - Tied to VS Code
+
+Sphinx
+  - Complex, .rst format
+  - Built for API docs, not general notes
+
+Zettlr
+  - Academic focus, .md only
+
+DocWire difference:
+  - Plain .txt (no format rules, optional header)
+  - Version aware (parses avNrN from content)
+  - CLI-first, LLM-friendly output
+
+===
+HISTORY COMMANDS
+
+dw log <file>
+  - Show save history for a file
+  - Example: dw log Dev-ListMap.txt
+
+dw diff <file>
+  - Show changes since last bump
+  - Example: dw diff Dev-ListMap.txt
+
+dw revert <file> <n>
+  - Revert file to n saves ago
+  - Example: dw revert Dev-ListMap.txt 2
+
+===
+FUTURE IDEAS
+
+- dw timeline - visual timeline of doc changes
+- dw export - export graph to JSON for external tools
+- VS Code extension - highlight broken refs inline
+- GitHub Action - run dw check on PR
+
+===
+STATUS
+
+Phase 1 MVP: COMPLETE
+- dw setup, setup remove
+- dw start, stop, bump, status, track, head
+
+Phase 2 Smart: COMPLETE
+- dw fix (with AF/MF tags + auto-fix)
+- dw compact (stats only)
+- dw archive
+- dw start runs in background, dw start -f for foreground
+
+Phase 2.5 Format Migration: COMPLETE
+- Migrated from .yml to .txt format (DWML)
+- Full DWML header format in user files
+- Fixed watcher loop issue (no header timestamp update)
+
+Phase 2.6-2.9 CLI Cleanup: COMPLETE
+- Moved scripts to .dw/cor/ subfolder
+- dw all list/watch/stop for global commands
+- dw start does init + sync + bump + watch (all in one)
+- dw fix -s (sync + repair)
+- dw fix -r (remove orphans)
+- dw fix -r -f <file> (remove specific file)
+- Removed standalone dw init, dw sync, dw remove, dw watch
+- Atomic polling for missed file changes (Claude Edit on WSL)
+- Fixed symlink path resolution for Unix install
+
+Phase 3.0 DWML v1.0: COMPLETE
+- Rebased DWML format to v1.0 (DontWorry Markup Language)
+- Block tags: =d=name=w= ... =q=name=e=
+- Value syntax: key;|value|; with ;| |; wrappers
+- Created dwml.py standalone parser in dwml/ repo
+- Updated all scripts to use new DWML format
+
+Scripts in template/cor/:
+- cli.py, utils.py, head.py, diff.py, bump.py, watch.py
+- sync.py, fix.py, archive.py, compact.py
+- atomic.py, poke.py, dwml.py
+
+Installers:
+- install.ps1, uninstall.ps1 (Windows)
+- install.sh, uninstall.sh (Linux/Mac/WSL)
+
+Key design:
+- =d=meta=w=...=q=meta=e= header with full DWML v1.0 = opt-in tracking
+- Single watcher daemon (watch.py)
+- Header management (head.py) - DWML format
+- Save = diff + s++ (internal)
+- dw bump = r++ (revision boundary)
+- dw start does everything (init, sync, bump, watch)
+- .dw/ inside tracked folder
+- No header = auto-ignored
+- All data in DWML v1.0 format (.txt) - no escaping issues
+- dwml.py standalone parser for any project
+
+Taglines:
+- "Git for docs, but automatic"
+- "Per-file versioning for the LLM era"
+- "Save = diff, bump = commit"
+
+END OF DOCUMENT

@@ -1,0 +1,29 @@
+feat: Initial release - DocWire v1.0
+
+Git for docs, but automatic.
+Per-file versioning for plain .txt files.
+
+- Save = auto-diff
+- Bump = commit
+- Zero learning curve
+
+Features:
+- Automatic change tracking on save
+- Per-file version history (not whole repo)
+- DWML v1.0 format (escape-free markup)
+- Background watcher process
+- Cross-platform (Windows, Linux, Mac, WSL)
+
+Commands:
+- dw setup, dw start, dw stop
+- dw bump, dw status, dw track
+- dw fix, dw archive, dw compact
+
+Uses DWML (DontWorry Markup Language) for all internal data.
+No escaping needed for special characters.
+
+Fork encouraged - make it your own.
+
+Licensed under GPLX-XBasic (Fairware)
+- LICENSE: Base terms
+- FAIRNESS.txt: Contribution tiers

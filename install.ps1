@@ -1,0 +1,134 @@
+# DocWire Installer for Windows
+# Run: .\install.ps1
+
+$ErrorActionPreference = "Stop"
+
+Write-Host "DocWire Installer (Windows)" -ForegroundColor Cyan
+Write-Host "=" * 40
+
+# Check Python
+$hasPython = $false
+try {
+    $pythonVersion = python --version 2>&1
+    if ($pythonVersion -match "Python") {
+        $hasPython = $true
+        Write-Host "Python: $pythonVersion"
+    }
+} catch {}
+
+if (-not $hasPython) {
+    Write-Host ""
+    Write-Host "Python not found" -ForegroundColor Yellow
+    Write-Host ""
+    $choice = Read-Host "Open Python download page? [y/N]"
+    if ($choice -eq "y" -or $choice -eq "Y") {
+        Start-Process "https://www.python.org/downloads/"
+        Write-Host ""
+        Write-Host "Install Python 3.10+, then run this installer again"
+    } else {
+        Write-Host ""
+        Write-Host "Install Python 3.10+ first:"
+        Write-Host "  https://www.python.org/downloads/"
+    }
+    exit 1
+}
+
+# Check pip
+$hasPip = $false
+try {
+    $pipVersion = pip --version 2>&1
+    if ($pipVersion -match "pip") {
+        $hasPip = $true
+    }
+} catch {}
+
+if (-not $hasPip) {
+    Write-Host ""
+    Write-Host "pip not found" -ForegroundColor Yellow
+    Write-Host ""
+    $choice = Read-Host "Install pip now? [y/N]"
+    if ($choice -eq "y" -or $choice -eq "Y") {
+        python -m ensurepip --upgrade
+    } else {
+        Write-Host ""
+        Write-Host "Install pip first:"
+        Write-Host "  python -m ensurepip --upgrade"
+        exit 1
+    }
+}
+
+Write-Host "pip: OK"
+
+# Check watchdog
+Write-Host "Checking dependencies..."
+$hasWatchdog = $false
+try {
+    python -c "import watchdog" 2>&1 | Out-Null
+    $hasWatchdog = $true
+} catch {}
+
+if (-not $hasWatchdog) {
+    Write-Host ""
+    Write-Host "watchdog module not found" -ForegroundColor Yellow
+    Write-Host ""
+    $choice = Read-Host "Install watchdog now? [y/N]"
+    if ($choice -eq "y" -or $choice -eq "Y") {
+        pip install watchdog
+    } else {
+        Write-Host ""
+        Write-Host "Install watchdog first:"
+        Write-Host "  pip install watchdog"
+        exit 1
+    }
+}
+
+Write-Host "watchdog: OK"
+
+# Set paths
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$sourceDir = Join-Path $scriptDir "win"
+$installDir = Join-Path $env:USERPROFILE "bin\docwire"
+
+# Check source exists
+if (-not (Test-Path (Join-Path $sourceDir "dw.bat"))) {
+    Write-Host "Error: win/dw.bat not found" -ForegroundColor Red
+    exit 1
+}
+
+# Create install directory
+if (-not (Test-Path $installDir)) {
+    New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+    Write-Host "Created: $installDir"
+} else {
+    Write-Host "Updating existing installation..."
+}
+
+# Copy files
+Write-Host "Copying files..."
+Copy-Item -Path "$sourceDir\*" -Destination $installDir -Recurse -Force
+Write-Host "Copied win/ to $installDir"
+
+# Add to PATH
+$currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($currentPath -notlike "*$installDir*") {
+    [Environment]::SetEnvironmentVariable("Path", "$currentPath;$installDir", "User")
+    Write-Host "Added to PATH: $installDir" -ForegroundColor Green
+} else {
+    Write-Host "Already in PATH"
+}
+
+Write-Host ""
+Write-Host "=" * 40
+Write-Host "Installation complete!" -ForegroundColor Green
+Write-Host ""
+Write-Host "IMPORTANT: Restart your terminal for PATH changes to take effect"
+Write-Host ""
+Write-Host "Then test with:"
+Write-Host "  dw"
+Write-Host ""
+Write-Host "To setup a docs folder:"
+Write-Host "  cd your-docs-folder"
+Write-Host "  dw setup"
+Write-Host "  dw init"
+Write-Host "  dw start"
+Write-Host ""

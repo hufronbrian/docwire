@@ -1,0 +1,368 @@
+=d=meta=w=
+=dw=
+=#= docwire tracked file | edit content below =o=
+=x= file;|./dwchecklist.txt|; =z=
+=x= version;|av1r1|; =z=
+=x= log;|./.dw/loc/dwchecklist.txt|; =z=
+=x= update;|2026-01-16T11:00:00Z|; =z=
+=x= refs;|./docwire.txt|;,;|./dwguide.txt|; =z=
+=wd=
+=q=meta=e=
+
+DOCWIRE IMPLEMENTATION CHECKLIST
+
+===
+Phase 0: Installer [DONE]
+
+[x] Repo structure (github.com/hufronbrian/docwire)
+    [x] win/ folder with dw.bat, dwroot.py, template/
+    [x] unx/ folder with dw, dwroot.py, template/
+    [x] docs/ folder with docwire.txt, dwchecklist.txt, dwguide.txt
+    [x] README.md
+
+[x] Windows installer
+    [x] install.ps1 - copy win/ to C:\Users\{user}\bin\docwire\
+    [x] Add to PATH automatically
+    [x] uninstall.ps1 - remove folder and PATH entry
+
+[x] Linux/Mac/WSL installer
+    [x] install.sh - copy unx/ to ~/.local/bin/docwire/
+    [x] Add to PATH in .bashrc/.zshrc
+    [x] uninstall.sh - remove folder
+
+[x] dwroot.py (entry point)
+    [x] Parse command args
+    [x] dw setup: copy template/ to current folder as .dw/
+    [x] dw setup remove: delete .dw/ with confirmation
+    [x] Other commands: run local .dw/cli.py
+
+===
+Phase 1: MVP [DONE]
+
+[x] utils.py (shared helpers)
+    [x] DWML parsers (parse_dwml_meta, parse_dwml_history, etc.)
+    [x] DWML formatters (format_dwml_meta, format_dwml_entry, etc.)
+    [x] File helpers (read_loc, write_loc, read_config, etc.)
+    [x] get_timestamp(), get_txt_files()
+    [x] read_file(), write_file(), ensure_folders()
+
+[x] head.py (header management) - DWML format
+    [x] parse_header(), has_header()
+    [x] create_header() - full DWML with =dw= =x= =z= =wd=
+    [x] add_header()
+    [x] update_field(), get_field()
+
+[x] diff.py (diff calculation)
+    [x] calc_diff(), has_changes(), diff_stats()
+
+[x] bump.py (version bumping)
+    [x] parse_version(), format_version()
+    [x] increment_r(), increment_v()
+    [x] check_rebase(), is_valid_version()
+
+[x] cli.py (main CLI)
+    [x] dw init, start, stop
+    [x] dw bump [-f file]
+    [x] dw status, track, head
+    [x] dw watch - list all watchers globally
+
+[x] watch.py (file watcher daemon)
+    [x] DWEventHandler (watchdog)
+    [x] on_modified, on_created, on_deleted, on_moved
+    [x] start_watcher(), stop_watcher(), is_watcher_running()
+    [x] Global registry (dw-registry.txt)
+    [x] Windows process detection fix (tasklist)
+
+===
+Phase 2: Smart Features [DONE]
+
+[x] dw sync
+    [x] Parse .txt for =d=meta=w= header
+    [x] Extract version, refs
+    [x] Update loc/*.txt metadata
+    [x] Rebuild index.txt
+    [x] Integrate into dw start (before auto-bump)
+    [x] Store ref_versions in loc/*.txt for STALE detection
+
+[x] dw fix (replaces dw suggest)
+    [x] Scan all tracked files
+    [x] Detect [AF] LARGE - history > 100 entries (auto-fixable)
+    [x] Detect [AF] ORPHAN - loc without .txt (auto-fixable)
+    [x] Detect [MF] STALE - refs changed since last save (manual)
+    [x] Detect [MF] BROKEN - refs to non-existent docs (manual)
+    [x] Show AF/MF counts
+    [x] Prompt: Auto-fix now? [y/n]
+    [x] -y flag: auto-fix without prompt
+    [x] -n flag: report only, no prompt
+    [x] Auto-fix LARGE: run archive
+    [x] Auto-fix ORPHAN: delete loc file
+
+[x] dw compact
+    [x] Generate cmp/*.txt with stats (DWML format)
+    [x] Stats: total saves, bumps, line changes, date range
+    [x] -f flag: compact specific file
+
+[x] dw archive
+    [x] Move loc/*.txt history to acv/{stem}-{timestamp}.txt
+    [x] Reset loc/*.txt to metadata only
+    [x] Update archive refs in loc/*.txt
+    [x] -f flag: archive specific file
+    [x] Threshold: 100 entries (from config.txt)
+
+===
+Phase 2.5: Format Migration [DONE]
+
+[x] Migrate from .yml to .txt format (DWML)
+    [x] config.txt (was config.yml)
+    [x] index.txt (was index.yml)
+    [x] loc/*.txt (was loc/*.yml) - history logs
+    [x] cmp/*.txt (was cmp/*.yml) - stats
+    [x] acv/*.txt (was acv/*.yml) - archived history
+    [x] glb/*.txt (was glb/*.yml) - session logs
+    [x] dw-registry.txt - global watcher registry
+    [x] Update utils.py - add DWML helpers
+    [x] Update all scripts to use .txt format
+    [x] Update head.py - full DWML header format
+
+[x] Fix dw watch not listing running watchers
+    [x] Parent process registers (not child)
+    [x] Windows tasklist for process detection
+    [x] Registry stored at install location
+
+[x] Fix watcher loop issue
+    [x] Skip .dw folder in on_modified
+    [x] Don't update header timestamp (causes loop)
+
+---
+Why DWML instead of YAML?
+- No escaping issues (quotes, colons, special chars, backslashes)
+- Content goes between tags as-is
+- Simple append-only format
+- Easy to read/parse with regex
+- LLM-friendly
+- No corruption from diff content
+
+===
+DWML (DontWorry Markup Language) v1.0
+
+Safe, no escaping needed, LLM-friendly.
+"DontWorry" - no escaping needed for special characters.
+Future file extension: .dwd
+Standalone parser: dwml.py in dwml/ repo
+
+---
+Block tags (open/close):
+=d=name=w= ... =q=name=e=
+
+| Block | Purpose |
+|-------|---------|
+| =d=meta=w= ... =q=meta=e= | Metadata block |
+| =d=history=w= ... =q=history=e= | History block |
+| =d=config=w= ... =q=config=e= | Config block |
+| =d=data=w= ... =q=data=e= | Generic data block |
+
+---
+Inline tags:
+| Tag | Purpose |
+|-----|---------|
+| =dw=...=wd= | Container/grouping |
+| =x=...=z= | Key-value content |
+| =+=...=o= | Added line (diff) |
+| =-=...=o= | Removed line (diff) |
+| =#=...=o= | Comment (ignored by parser) |
+
+---
+Value Syntax:
+=x= key;|value|; =z=
+
+- ;| opens value
+- |; closes value
+- , separates multiple values
+
+Examples:
+=x= file;|./doc.txt|; =z=
+=x= tags;|red|;,;|green|;,;|blue|; =z=
+=x= host;|localhost|; port;|5432|; =z=
+
+Why ;| and |; ?
+- Semicolon+pipe combo extremely rare in normal text
+- Safe for content with pipes, colons, quotes, code
+
+---
+User file header format:
+=d=meta=w=
+=dw=
+=#= docwire tracked file =o=
+=x= file;|./myfile.txt|; =z=
+=x= version;|av1r1|; =z=
+=x= log;|./.dw/loc/myfile.txt|; =z=
+=x= update;|2026-01-15T14:30:00Z|; =z=
+=x= refs;||; =z=
+=wd=
+=q=meta=e=
+
+Your content here...
+
+---
+loc/*.txt format:
+=d=meta=w=
+=x= file;|./myfile.txt|; =z=
+=x= version;|av1r2|; =z=
+=x= saves;|5|; =z=
+=x= updated;|2026-01-15T14:30:00Z|; =z=
+=q=meta=e=
+
+=d=history=w=
+=dw=
+=x= 2026-01-15T14:00:00Z;|initialized|; =z=
+=wd=
+=dw=
+=x= 2026-01-15T14:10:00Z;|save:1|; =z=
+=+= added this line =o=
+=-= removed this line =o=
+=wd=
+=dw=
+=x= 2026-01-15T14:30:00Z;|bumped av1r2|; =z=
+=wd=
+=q=history=e=
+
+===
+Phase 2.6: Folder Reorganization [DONE]
+
+[x] Move scripts to .dw/cor/
+    [x] Create cor/ subfolder for core scripts
+    [x] Move cli.py, utils.py, head.py, diff.py, bump.py to cor/
+    [x] Move watch.py, sync.py, fix.py, archive.py, compact.py to cor/
+    [x] Update dwroot.py to call .dw/cor/cli.py
+    [x] Update internal imports/paths
+    [x] Keep config.txt, index.txt at .dw/ root
+    [x] Keep data folders (glb/, snp/, loc/, cmp/, acv/) at .dw/ root
+[x] Fix dwroot.py index.yml -> index.txt bug (both win/unx)
+
+===
+Phase 2.7: Global Commands [DONE]
+
+[x] Add dw-projects.txt registry for all .dw/ locations
+[x] dw setup - now updates existing .dw/cor/ if already exists
+[x] dw update - update .dw/cor/ scripts in current folder
+[x] dw all list - list all registered projects
+[x] dw all update - update all registered projects
+[x] dw all watch - list all running watchers (DWML format)
+[x] dw all stop - stop all watchers globally
+[x] Fix watch.py path for cor/ subfolder
+[x] Interactive install.sh - prompt to install missing deps
+[x] install.sh line endings fix (CRLF -> LF)
+[x] Remove unx/dwroot.py (use dw only)
+[x] dw start now runs init before sync/bump
+
+===
+Phase 2.8: Atomic Poll Fix [DONE]
+
+[x] Remove _process_delete from watch.py (no auto-delete handling)
+[x] Remove on_deleted handler from watch.py
+[x] Add init_file() function to cli.py for single file init
+[x] Add dw remove -f <file> command for manual untrack
+[x] on_modified uses _process_save (normal edits)
+[x] on_created runs init_file (for new tracked files)
+
+[x] Atomic polling for missed changes (Claude Edit on WSL)
+    [x] atomic.py - polls every 0.5s for missed file changes
+        - get_most_recent_file() - find most recently modified .txt
+        - check_file() - compare mtime/lines vs snp
+        - poke_file() - trigger poke.py if change detected
+        - start_poll() / stop_poll() - thread control
+    [x] poke.py - touch file to trigger watchdog
+        - Read file content, write it back unchanged
+        - This triggers on_modified event in watchdog
+    [x] watch.py integration
+        - start_poll() on watcher start
+        - stop_poll() on watcher shutdown
+
+===
+Phase 2.9: CLI Cleanup [DONE]
+
+[x] Merge dw sync into dw init (dw start calls init which syncs)
+[x] Remove standalone dw init, dw sync, dw remove from help
+    - dw init still works (hidden)
+[x] Consolidate fix commands:
+    [x] dw fix - scan for issues (report)
+    [x] dw fix -y - auto-fix all
+    [x] dw fix -n - report only (no prompt)
+    [x] dw fix -s - sync + repair (refresh metadata, create missing snp/loc)
+    [x] dw fix -r - remove all orphans (keeps /snp for recovery)
+    [x] dw fix -r -f <file> - remove specific file from tracking
+[x] Updated help text for cleaner CLI
+[x] Remove dw watch (use dw all watch instead)
+[x] dw all stop - interactive choice (stop all or specific)
+[x] Fix symlink path resolution for Unix install
+[x] Skip timestamped backup files in orphan scan
+
+New simplified command structure:
+  dw setup        - create/update .dw/
+  dw start        - init + sync + bump + watch (all in one)
+  dw stop         - stop watcher (current folder)
+  dw all watch    - list all running watchers
+  dw all stop     - stop watchers (interactive)
+  dw fix          - all maintenance under one command
+  dw fix -s       - sync/repair
+  dw fix -r       - remove orphans
+  dw fix -y       - auto-fix issues
+
+===
+Phase 3: Advanced
+
+[ ] dw log <file> - pretty print history
+[ ] dw diff <file> - changes since last bump
+[ ] dw revert <file> <n> - restore from n saves ago
+[ ] dw graph - mermaid/ASCII relationship map
+[ ] Enterprise mode - remote sync
+
+===
+Phase 4: Scale (Future)
+
+[ ] Binary storage (.dwb format)
+[ ] Remote sync optimization
+
+===
+Phase 3.0: DWML v1.0 [DONE]
+
+[x] Rebase DWML format to v1.0 (DontWorry Markup Language)
+    [x] Block tags: =d=name=w= ... =q=name=e=
+    [x] Value syntax: key;|value|; with ;| |; wrappers
+    [x] Remove numbered nesting (dw2, x2) - keep simple
+[x] Create dwml.py standalone parser
+    [x] DWML class for document handling
+    [x] DWMLBlock, DWMLContainer classes
+    [x] parse(), parse_file(), render(), save()
+    [x] Convenience functions (has_block, get_field, create_block, etc.)
+[x] Update docwire scripts
+    [x] head.py - use new DWML format
+    [x] utils.py - update all DWML helpers
+    [x] config.txt template
+    [x] Copy to win/template/cor/
+[x] Update documentation
+    [x] docwire.txt - new format examples
+    [x] dwchecklist.txt - DWML section
+    [x] dwguide.txt
+    [x] cc5dw.txt
+
+===
+Post-Launch
+
+[x] README.md for GitHub
+[x] DWML standalone repo (dwml/ with dwml.txt + dwml.py)
+[ ] PyPI package
+[ ] VS Code extension (maybe)
+
+===
+Documentation Updates [DONE]
+
+[x] Update README.md with new command structure
+[x] Update dwguide.txt with:
+    [x] New dw fix flags (-s, -r, -r -f)
+    [x] dw all watch / dw all stop
+    [x] Removed dw init, dw sync, dw remove, dw watch
+[x] Update docwire.txt STATUS section
+[x] Review DWML spec in dwchecklist.txt (already done)
+
+END OF CHECKLIST

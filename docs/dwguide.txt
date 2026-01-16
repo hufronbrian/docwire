@@ -1,0 +1,373 @@
+=d=meta=w=
+=dw=
+=#= docwire tracked file | edit content below =o=
+=x= file;|./dwguide.txt|; =z=
+=x= version;|av1r1|; =z=
+=x= log;|./.dw/loc/dwguide.txt|; =z=
+=x= update;|2026-01-16T12:00:00Z|; =z=
+=x= refs;|./docwire.txt|;,;|./dwchecklist.txt|; =z=
+=wd=
+=q=meta=e=
+
+DOCWIRE USER GUIDE
+
+Git for docs, but automatic.
+
+===
+INSTALL
+
+---
+Clone and install:
+
+git clone https://github.com/hufronbrian/docwire
+cd docwire
+
+Windows (PowerShell):
+.\install.ps1
+
+Linux/Mac/WSL:
+chmod +x install.sh
+./install.sh
+
+Restart terminal, then 'dw' command works globally.
+
+---
+Uninstall:
+
+Windows: .\uninstall.ps1
+Linux/Mac/WSL: ./uninstall.sh
+
+---
+Per-folder setup:
+
+cd your-docs-folder
+dw setup
+
+This copies template/ to your folder as .dw/
+
+===
+QUICK START
+
+1. Setup folder (first time only)
+   cd your-docs-folder
+   dw setup
+
+2. Start watcher (does init + sync + bump automatically)
+   dw start
+   -> adds =d=meta=w= headers to all .txt files
+   -> syncs metadata
+   -> auto-bumps unbumped saves
+   -> starts watcher
+
+3. Work on your .txt files normally
+   - Save = auto-diff (tracked internally)
+   - Edit, save, repeat
+
+4. Mark revision boundary
+   dw bump
+
+5. Stop when done
+   dw stop
+
+That's it! DocWire handles versioning automatically.
+
+===
+COMMANDS
+
+---
+Setup (first time)
+
+dw setup
+  Copy .dw/ template to current folder
+  Run once per docs folder
+  If already exists: updates .dw/cor/ scripts
+
+dw setup remove
+  Delete .dw/ folder and all history
+  Prompts for confirmation
+
+dw update
+  Update .dw/cor/ scripts from install location
+
+---
+Global (all projects)
+
+dw all list
+  List all registered DocWire projects
+
+dw all watch
+  List all running watchers globally
+
+dw all stop
+  Stop watchers (interactive choice)
+  [0] Stop ALL
+  [1], [2]... Stop specific watcher
+
+---
+Core (daily use)
+
+dw start
+  Start watcher daemon
+  Does: init + sync + bump + watch (all in one)
+  If already running, prompts:
+    [1] Keep - continue with existing watcher
+    [2] Restart - stop and start fresh
+    [3] Stop - stop watcher
+
+dw start -f
+  Start watcher in foreground (blocking)
+  Useful for debugging
+
+dw stop
+  Stop watcher daemon (current folder)
+
+dw bump
+  Mark revision boundary (av1r1 -> av1r2)
+  Use when you want to "checkpoint" your work
+
+dw status
+  Show watcher status and tracked files
+
+dw track <file>
+  Show file history
+  -l  show full loc file
+  -t  show .txt content
+  -a  show all paths
+
+dw head -f <file>
+  Add header to specific file (manual tracking)
+
+---
+Fix & Maintain
+
+dw fix
+  Scan for issues and show report:
+  [AF] LARGE - history > 100 entries (auto-fixable)
+  [AF] ORPHAN - loc without .txt (auto-fixable)
+  [MF] STALE - refs changed since last save (manual)
+  [MF] BROKEN - refs to missing docs (manual)
+  Prompts: Auto-fix now? [y/n]
+
+dw fix -y
+  Auto-fix all issues without prompt
+
+dw fix -n
+  Report only (no prompt)
+
+dw fix -s
+  Sync + repair
+  - Refresh metadata from headers
+  - Create missing snp/loc files
+  - Rebuild index.txt
+
+dw fix -r
+  Remove all orphan loc files
+  (keeps /snp for potential recovery)
+
+dw fix -r -f <file>
+  Remove specific file from tracking
+
+dw compact
+  Generate cmp/*.txt with stats
+  Stats: saves, bumps, line changes, date range
+
+dw archive
+  Move old history to acv/ folder
+  Reset loc/*.txt to metadata only
+  -f <file>  archive specific file
+
+===
+HEADER FORMAT (DWML v1.0)
+
+DocWire tracks files with =d=meta=w=...=q=meta=e= header in DWML v1.0 format:
+
+=d=meta=w=
+=dw=
+=#= docwire tracked file =o=
+=x= file;|./myfile.txt|; =z=
+=x= version;|av1r1|; =z=
+=x= log;|./.dw/loc/myfile.txt|; =z=
+=x= update;|2026-01-15T12:00:00Z|; =z=
+=x= refs;|./other.txt|;,;|./another.txt|; =z=
+=wd=
+=q=meta=e=
+
+Your document content here...
+
+---
+Fields
+
+file     - path to this file (auto)
+version  - current version (auto on bump)
+log      - path to history file (auto)
+update   - last save timestamp (auto)
+refs     - referenced docs (manual, add your own)
+
+---
+No header = not tracked
+
+Files without =d=meta=w=...=q=meta=e= header are ignored.
+Remove header to stop tracking a file.
+
+===
+VERSION FORMAT
+
+avNrN = base + major + revision
+
+Examples:
+  av1r1  - original, first revision
+  av1r5  - original, 5th revision (5 bumps)
+  av2r1  - merged from branch
+  bv1r1  - rebased (new direction)
+
+---
+How versions change
+
+Save file     -> internal s++ (not visible)
+dw bump       -> r++ (av1r1 -> av1r2)
+Merge branch  -> v++ (av1r5 -> av2r1)
+Rebase        -> new base (av3r5 -> bv1r1)
+
+---
+Rebase (manual)
+
+To rebase, just change the base letter in header:
+  =x= version;|av3r5|; =z=  ->  =x= version;|bv1r1|; =z=
+
+Watcher detects this and archives old history.
+
+===
+BRANCHING
+
+Branching = just copy the file!
+
+1. Copy myfile.txt -> myfile - copy.txt
+2. Edit the copy
+3. When done, paste content back to main
+4. Delete the copy
+
+DocWire auto-detects merges and bumps version.
+
+===
+FOLDER STRUCTURE
+
+your-docs/
+  .dw/
+    config.txt    <- settings, ignore patterns
+    index.txt     <- list of tracked files
+    glb/          <- session logs
+    snp/          <- snapshots (for diff)
+    loc/          <- history per file (DWML format)
+    cmp/          <- compact summaries
+    acv/          <- archived history
+    cor/          <- core scripts (dwml.py, cli.py, etc.)
+  myfile.txt      <- your docs with =d=meta=w= header
+  another.txt
+
+All data files use DWML v1.0 format (.txt) - no escaping issues.
+
+===
+IGNORE PATTERNS
+
+Edit .dw/config.txt:
+
+=d=config=w=
+=#= docwire configuration =o=
+=x= ignore;|./drafts/*|;,;|./archive/*|;,;|./_*.txt|; =z=
+=x= archive_threshold;|100|; =z=
+=q=config=e=
+
+Files matching ignore patterns are never tracked.
+
+===
+DWML (DontWorry Markup Language) v1.0
+
+DocWire uses DWML for all internal data files.
+"DontWorry" - no escaping needed for special characters.
+
+---
+Block tags (open/close):
+  =d=name=w= ... =q=name=e=
+
+Examples:
+  =d=meta=w= ... =q=meta=e=       metadata block
+  =d=history=w= ... =q=history=e= history block
+  =d=config=w= ... =q=config=e=   config block
+
+---
+Inline tags:
+  =dw=...=wd=    container/grouping
+  =x=...=z=      key-value content
+  =+=...=o=      added line (diff)
+  =-=...=o=      removed line (diff)
+  =#=...=o=      comment
+
+---
+Value syntax:
+  =x= key;|value|; =z=
+
+  ;| opens value
+  |; closes value
+  , separates multiple values
+
+Examples:
+  =x= file;|./doc.txt|; =z=
+  =x= tags;|red|;,;|green|;,;|blue|; =z=
+
+No escaping needed - content goes between ;| and |; safely.
+
+===
+TIPS
+
+1. Bump often
+   dw bump after completing a task or before break
+
+2. Use refs
+   Add refs to link related docs
+   dw fix will warn when refs are updated
+
+3. Check status
+   dw status shows unbumped files
+
+4. Archive when big
+   dw archive when history gets large (100+ entries)
+   Or use dw fix to auto-archive
+
+5. No header = no tracking
+   Keep scratch files without =d=meta=w= header
+
+===
+FOR LLMS
+
+DocWire is LLM-friendly:
+
+1. Read the header to find log path:
+   =x= log;|./.dw/loc/myfile.txt|; =z=
+
+2. Read loc/*.txt for full history (DWML format)
+
+3. Read cmp/*.txt for summary (if exists)
+
+4. Run dw fix to see what needs updating
+
+5. Never manually update version or update fields
+   (watcher handles these)
+
+===
+TROUBLESHOOTING
+
+Q: File not being tracked?
+A: Check for =d=meta=w=...=q=meta=e= header
+A: Check .dw/config.txt ignore patterns
+
+Q: Watcher not running?
+A: Run dw status to check
+A: Run dw start to restart
+
+Q: History too big?
+A: Run dw archive to move old history
+
+Q: Want to stop tracking a file?
+A: Remove the =d=meta=w=...=q=meta=e= header block
+
+END OF GUIDE

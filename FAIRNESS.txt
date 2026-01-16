@@ -1,0 +1,104 @@
+GPLX Fairness Framework
+XBasic-1.0
+
+This file defines the contribution terms for this GPLX-licensed project.
+See LICENSE for base terms and philosophy.
+
+===
+THRESHOLD
+
+Contribution triggers when ALL of these are true:
+1. Entity is a commercial organization (for-profit)
+2. Entity uses the software in production/commercial capacity
+3. Entity annual revenue exceeds $500,000 USD
+
+Below threshold = completely free, no strings attached.
+
+===
+TWO PATHS
+
+Choose your path based on your needs:
+
+Open Path (GPL-style):
+- Share modifications (open source)
+- Lower contribution tier
+
+Closed Path (MIT-style):
+- Keep modifications private
+- Higher contribution tier (3x Open Path)
+
+===
+CONTRIBUTION TIERS
+
+Open Path (GPL-style, share modifications):
+| Tier | Annual Revenue (USD) | Monthly Contribution |
+|------|----------------------|----------------------|
+| T1   | < $500,000           | $0 (exempt)          |
+| T2   | $500k - $1M          | $50                  |
+| T3   | $1M - $5M            | $150                 |
+| T4   | $5M - $10M           | $400                 |
+| T5   | $10M - $50M          | $1,000               |
+| T6   | $50M+                | $4,000               |
+
+Closed Path (MIT-style, keep code private):
+| Tier | Annual Revenue (USD) | Monthly Contribution |
+|------|----------------------|----------------------|
+| T1   | < $500,000           | $0 (exempt)          |
+| T2   | $500k - $1M          | $150                 |
+| T3   | $1M - $5M            | $450                 |
+| T4   | $5M - $10M           | $1,200               |
+| T5   | $10M - $50M          | $3,000               |
+| T6   | $50M+                | $12,000              |
+
+Reference: These tiers are approximately 10-30% of typical commercial
+license costs. Designed for ecosystem awareness, not extraction.
+
+===
+CAPS
+
+Hard caps protect companies from unlimited liability:
+
+Open Path:
+- Maximum $4,000/month per project
+- Maximum $20,000/month to same maintainer (all projects)
+
+Closed Path:
+- Maximum $12,000/month per project
+- Maximum $60,000/month to same maintainer (all projects)
+
+No exceptions. Caps are absolute.
+
+===
+EXEMPTIONS
+
+Fully exempt (always free):
+- Non-profit organizations (registered 501c3 or equivalent)
+- Educational institutions (public schools, non-profit private schools)
+  NOT exempt: for-profit education (bootcamps, online course platforms)
+- Government agencies (federal, state, local)
+  NOT exempt: for-profit government contractors
+- Personal/hobby use
+- Startups in first 2 years of operation
+- Contributors to this project (code, docs, significant support)
+
+===
+GRACE PERIOD
+
+New companies/startups:
+- First 2 years: exempt from contribution
+- Starts from company founding date
+- Applies even if revenue exceeds threshold
+
+===
+INFLATION ADJUSTMENT
+
+Tiers are reviewed every 3 years to maintain fairness.
+Changes announced 6 months before taking effect.
+
+===
+REFERENCE
+
+Full XBasic specification: https://github.com/hufronbrian/gplx/blob/main/xbasic.txt
+
+===
+END OF FAIRNESS FRAMEWORK

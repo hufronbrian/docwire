@@ -1,0 +1,76 @@
+GPLX License
+Version 1.0
+
+GPLX = MIT + GPL + Fairness
+
+GPLX introduces "Fairware" - a new approach to open source licensing.
+"Sustainable fairness through open exchange and mutual good faith."
+
+Fairware = open source + fair exchange when value is created
+
+===
+TERMS
+
+This software is licensed under GPLX, which combines:
+- GPL freedoms (use, modify, distribute)
+- MIT option (closed source path available)
+- Fairness (sustainable maintainer support)
+
+Default: GPL-style (share modifications)
+Optional: MIT-style (pay Closed Path rate to keep private)
+
+===
+FAIRNESS FRAMEWORK
+
+This project uses XBasic-1.0 fairness framework.
+See FAIRNESS.txt for contribution tiers and terms.
+
+Framework summary:
+- Free for companies under $500k revenue
+- Tiered contribution above threshold
+- Caps to prevent hostage situations
+- Exempt: non-profits, public education, government, startups, contributors
+
+===
+GOOD FAITH
+
+GPLX is built on mutual good faith from all parties.
+Corporations are not inherently bad, maintainers are not inherently victims.
+We are partners in building software that benefits humanity.
+
+All parties agree to:
+- Honest communication
+- Reasonable interpretation of terms
+- No gaming the system
+- No hostage situations (from either side)
+- Assume good intent first
+
+If standard terms create genuine hardship, parties may negotiate
+alternative arrangements.
+
+===
+ENFORCEMENT
+
+The maintainer agrees to:
+1. Communicate before any enforcement action
+2. Negotiate in good faith
+3. Accept contribution-in-kind where appropriate
+4. Pursue legal action only as absolute last resort
+
+===
+CONTACT
+
+Maintainer: hufronbrian
+GitHub: https://github.com/hufronbrian
+Payment: GitHub Sponsors (or contact for alternatives)
+
+===
+REFERENCES
+
+GPLX Framework: https://github.com/hufronbrian/gplx
+Fairness Framework: See FAIRNESS.txt or https://github.com/hufronbrian/gplx
+GPLv3 (Open Path base): https://www.gnu.org/licenses/gpl-3.0.html
+MIT (Closed Path base): https://opensource.org/licenses/MIT
+
+===
+END OF LICENSE

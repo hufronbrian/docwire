@@ -1,0 +1,5 @@
+=d=config=w=
+=#= docwire configuration =o=
+=x= ignore;|./drafts/*|;,;|./archive/*|;,;|./_*.txt|; =z=
+=x= archive_threshold;|100|; =z=
+=q=config=e=
