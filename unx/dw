@@ -26,6 +26,38 @@ def get_repo_path():
     return Path(__file__).resolve().parent
 
 
+def parse_dwml_registry(content):
+    """Parse DWML format registry file to extract watchers list"""
+    import re
+    watchers = []
+
+    # Match =x= watchers;|entry1|entry2|...|; =z=
+    match = re.search(r'=x=\s*watchers;([^=]*?);\s*=z=', content)
+    if match:
+        raw = match.group(1).strip()
+        # Split by | but first/last are empty due to format |val1|val2|...|
+        parts = [p for p in raw.split('|') if p]
+        # Each watcher is 3 consecutive parts: path, pid, started
+        i = 0
+        while i + 2 < len(parts):
+            watchers.append({
+                'path': parts[i],
+                'pid': parts[i + 1],
+                'started': parts[i + 2]
+            })
+            i += 3
+
+    return watchers
+
+
+def format_dwml_registry(watchers):
+    """Format watchers list back to DWML format"""
+    if not watchers:
+        return ''
+    entries = '|'.join([f'{w["path"]}|{w["pid"]}|{w["started"]}' for w in watchers])
+    return f'=d=meta=w=\n=x= watchers;|{entries}|; =z=\n=q=meta=e=\n'
+
+
 def get_projects_path():
     """Get path to projects registry"""
     return get_repo_path() / 'dw-projects.txt'
@@ -234,16 +266,8 @@ def cmd_all_watch():
         print("No watchers running.")
         return
 
-    # Parse DWML registry format: watchers:path1|pid1|started1||path2|pid2|started2
-    watchers = []
-    for line in content.split('\n'):
-        line = line.strip()
-        if line.startswith('watchers:'):
-            entries = line[9:].split('||')  # Skip 'watchers:'
-            for entry in entries:
-                parts = entry.split('|')
-                if len(parts) >= 3:
-                    watchers.append({'path': parts[0], 'pid': parts[1], 'started': parts[2]})
+    # Parse DWML registry format
+    watchers = parse_dwml_registry(content)
 
     if not watchers:
         print("No watchers running.")
@@ -286,19 +310,7 @@ def cmd_all_stop():
         return
 
     # Parse DWML registry
-    watchers = []
-    for line in content.split('\n'):
-        line = line.strip()
-        if line.startswith('watchers:'):
-            entries = line[9:].split('||')
-            for entry in entries:
-                parts = entry.split('|')
-                if len(parts) >= 3:
-                    watchers.append({
-                        'path': parts[0],
-                        'pid': parts[1],
-                        'started': parts[2]
-                    })
+    watchers = parse_dwml_registry(content)
 
     # Filter active watchers
     active = []
@@ -356,11 +368,7 @@ def cmd_all_stop():
                 print(f"Stopped: {Path(w['path']).name} (PID: {w['pid']})")
                 # Update registry - remove this one
                 remaining = [x for x in active if x['pid'] != w['pid']]
-                if remaining:
-                    entries = '||'.join([f"{x['path']}|{x['pid']}|{x['started']}" for x in remaining])
-                    registry_path.write_text(f"watchers:{entries}\n")
-                else:
-                    registry_path.write_text('')
+                registry_path.write_text(format_dwml_registry(remaining))
             except (ProcessLookupError, ValueError, OSError):
                 print(f"Could not stop (PID: {w['pid']})")
         else:

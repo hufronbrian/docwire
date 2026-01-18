@@ -125,6 +125,15 @@ if ($currentPath -notlike "*$installDir*") {
 Write-Host ""
 Write-Host "=" * 40
 Write-Host "Installation complete!" -ForegroundColor Green
+
+# Auto-update all registered projects
+$dwExe = Join-Path $installDir "dw.bat"
+if (Test-Path $dwExe) {
+    Write-Host ""
+    Write-Host "Updating registered projects..."
+    & $dwExe all update
+}
+
 Write-Host ""
 Write-Host "IMPORTANT: Restart your terminal for PATH changes to take effect"
 Write-Host ""

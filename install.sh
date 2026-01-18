@@ -155,6 +155,14 @@ fi
 echo ""
 echo "========================================"
 echo "Installation complete!"
+
+# Auto-update all registered projects
+if [ -x "$INSTALL_DIR/dw" ]; then
+    echo ""
+    echo "Updating registered projects..."
+    "$INSTALL_DIR/dw" all update
+fi
+
 echo ""
 echo "IMPORTANT: Restart your terminal or run:"
 echo "  source $SHELL_RC"

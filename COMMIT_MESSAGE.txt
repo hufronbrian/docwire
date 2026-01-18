@@ -19,4 +19,18 @@ Fix installer not cleaning old template files
 - install.sh: Same fix for Linux/Mac/WSL installer
 - Fixes issue where old scripts persisted at .dw/ root instead of only in .dw/cor/
 
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+---
+
+Fix dw all watch/stop not detecting watchers (DWML parsing)
+
+- Add parse_dwml_registry() and format_dwml_registry() to dwroot.py (win + unx)
+- cmd_all_watch and cmd_all_stop now correctly parse DWML format registry
+- Registry format: =x= watchers;|path|pid|started|; =z=
+
+---
+
+Auto-run dw all update after install
+
+- install.ps1: Run dw all update after copying files
+- install.sh: Same for Linux/Mac/WSL
+- All registered projects get updated cor/ scripts automatically
