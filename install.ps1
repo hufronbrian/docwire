@@ -103,6 +103,41 @@ if (-not (Test-Path $installDir)) {
     Write-Host "Updating existing installation..."
 }
 
+# Stop running watchers before update
+$dwExe = Join-Path $installDir "dw.bat"
+$watcherPaths = @()
+if (Test-Path $dwExe) {
+    Write-Host "Checking for running watchers..."
+    $registryFile = Join-Path $installDir "dw-registry.txt"
+    if (Test-Path $registryFile) {
+        $content = Get-Content $registryFile -Raw
+        # Parse DWML format to get watcher paths
+        if ($content -match '=x=\s*watchers;([^=]*?);\s*=z=') {
+            $raw = $matches[1].Trim()
+            $parts = $raw.Split('|') | Where-Object { $_ }
+            for ($i = 0; $i -lt $parts.Count - 2; $i += 3) {
+                $watcherPaths += $parts[$i]
+            }
+        }
+    }
+    if ($watcherPaths.Count -gt 0) {
+        Write-Host "Stopping $($watcherPaths.Count) watcher(s)..."
+        # Use taskkill for each registered watcher PID
+        $content = Get-Content $registryFile -Raw
+        if ($content -match '=x=\s*watchers;([^=]*?);\s*=z=') {
+            $raw = $matches[1].Trim()
+            $parts = $raw.Split('|') | Where-Object { $_ }
+            for ($i = 1; $i -lt $parts.Count - 1; $i += 3) {
+                $procId = $parts[$i]
+                taskkill /PID $procId /F 2>$null | Out-Null
+            }
+        }
+        # Clear registry
+        Set-Content -Path $registryFile -Value ""
+        Write-Host "Watchers stopped"
+    }
+}
+
 # Copy files (clean template first to remove legacy files)
 Write-Host "Copying files..."
 $templateDir = Join-Path $installDir "template"
@@ -132,6 +167,13 @@ if (Test-Path $dwExe) {
     Write-Host ""
     Write-Host "Updating registered projects..."
     & $dwExe all update
+}
+
+# Notify user to restart watchers
+if ($watcherPaths.Count -gt 0) {
+    Write-Host ""
+    Write-Host "NOTE: $($watcherPaths.Count) watcher(s) were stopped for update." -ForegroundColor Yellow
+    Write-Host "Run 'dw all start' to restart them."
 }
 
 Write-Host ""

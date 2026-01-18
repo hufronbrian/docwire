@@ -260,8 +260,47 @@ def cmd_all_update():
     print(f"\nUpdated {updated} project(s), skipped {skipped}")
 
 
-def cmd_all_watch():
+def cmd_all_watch(bg_scan=False):
     """List all running watchers"""
+    if bg_scan:
+        # Scan for python processes that might be watchers
+        print("Scanning background python processes...\n")
+        try:
+            result = subprocess.run(
+                ['powershell', '-Command',
+                 'Get-CimInstance Win32_Process | Where-Object {$_.Name -like "*python*"} | Select-Object ProcessId, CommandLine | Format-List'],
+                capture_output=True, text=True
+            )
+            output = result.stdout.strip()
+            if not output:
+                print("No python processes found.")
+                return
+
+            # Parse output and filter for watcher-related
+            found = []
+            current = {}
+            for line in output.split('\n'):
+                line = line.strip()
+                if line.startswith('ProcessId'):
+                    current['pid'] = line.split(':', 1)[1].strip()
+                elif line.startswith('CommandLine'):
+                    current['cmd'] = line.split(':', 1)[1].strip() if ':' in line else ''
+                    if current.get('cmd'):
+                        cmd_lower = current['cmd'].lower()
+                        if 'watch' in cmd_lower or 'docwire' in cmd_lower or '.dw' in cmd_lower:
+                            found.append(current.copy())
+                    current = {}
+
+            if found:
+                print("Possible watcher processes (may include false positives):\n")
+                for p in found:
+                    print(f"  PID {p['pid']}: {p['cmd']}")
+            else:
+                print("No python processes matching 'watch', 'docwire', or '.dw' found.")
+        except Exception as e:
+            print(f"Error scanning processes: {e}")
+        return
+
     # Read watcher registry
     registry_path = get_repo_path() / 'dw-registry.txt'
 
@@ -392,6 +431,113 @@ def cmd_all_stop():
         print("Invalid choice")
 
 
+def cmd_all_start():
+    """Start watchers with interactive choice"""
+    projects = read_projects()
+
+    if not projects:
+        print("No projects registered.")
+        print("Run 'dw setup' in a folder to register it.")
+        return
+
+    # Filter to projects that have .dw/ folder
+    available = []
+    for path in projects:
+        dw_path = Path(path) / '.dw'
+        if dw_path.exists():
+            available.append(path)
+
+    if not available:
+        print("No projects with .dw/ folder found.")
+        return
+
+    # Check which already have watchers running
+    registry_path = get_repo_path() / 'dw-registry.txt'
+    running_paths = set()
+    if registry_path.exists():
+        content = registry_path.read_text().strip()
+        if content:
+            watchers = parse_dwml_registry(content)
+            for w in watchers:
+                # Check if PID still alive
+                try:
+                    result = subprocess.run(
+                        ['tasklist', '/FI', f'PID eq {w["pid"]}', '/NH'],
+                        capture_output=True, text=True
+                    )
+                    if w['pid'] in result.stdout:
+                        running_paths.add(w['path'])
+                except Exception:
+                    pass
+
+    # Show list
+    print("\nRegistered projects:\n")
+    print("  [0] Start ALL (skip already running)")
+    for i, path in enumerate(available, 1):
+        status = "(running)" if path in running_paths else ""
+        short_path = path
+        if len(path) > 50:
+            short_path = '...' + path[-47:]
+        print(f"  [{i}] {short_path} {status}")
+
+    print()
+    try:
+        choice = input(f"Start which? [0-{len(available)}]: ").strip()
+    except EOFError:
+        print("No input, cancelled.")
+        return
+
+    try:
+        choice = int(choice)
+        started = 0
+
+        if choice == 0:
+            # Start all (skip running)
+            for path in available:
+                if path in running_paths:
+                    print(f"  [SKIP] {Path(path).name} (already running)")
+                    continue
+                try:
+                    os.chdir(path)
+                    # Run dw start directly (it spawns background daemon)
+                    result = subprocess.run(
+                        [sys.executable, str(Path(__file__).resolve()), 'start'],
+                        capture_output=True, text=True
+                    )
+                    if result.returncode == 0:
+                        print(f"  [OK] {Path(path).name}")
+                        started += 1
+                    else:
+                        print(f"  [FAIL] {Path(path).name}: {result.stderr or result.stdout}")
+                except Exception as e:
+                    print(f"  [FAIL] {Path(path).name}: {e}")
+            print(f"\nStarted {started} watcher(s)")
+
+        elif 1 <= choice <= len(available):
+            path = available[choice - 1]
+            if path in running_paths:
+                print(f"Already running: {Path(path).name}")
+                return
+            try:
+                os.chdir(path)
+                # Run dw start directly (it spawns background daemon)
+                result = subprocess.run(
+                    [sys.executable, str(Path(__file__).resolve()), 'start'],
+                    capture_output=True, text=True
+                )
+                if result.returncode == 0:
+                    print(f"Started: {Path(path).name}")
+                else:
+                    print(f"Could not start: {result.stderr or result.stdout}")
+            except Exception as e:
+                print(f"Could not start: {e}")
+        else:
+            print("Invalid choice")
+
+    except ValueError:
+        print("Invalid choice")
+
+
 def run_local_cli(args):
     """Run local .dw/cor/cli.py with given args"""
     dw_path = Path.cwd() / '.dw'
@@ -430,7 +576,9 @@ def main():
         print("\nGlobal:")
         print("  all list      List all registered projects")
         print("  all update    Update all projects")
+        print("  all start     Start watchers (interactive)")
         print("  all watch     List all running watchers")
+        print("  all watch -bg Scan background processes")
         print("  all stop      Stop all watchers")
         print("\nCore:")
         print("  start     Start watcher (init + sync + bump + watch)")
@@ -462,7 +610,7 @@ def main():
         cmd_update()
     elif cmd == 'all':
         if not args:
-            print("Usage: dw all <list|update|watch|stop>")
+            print("Usage: dw all <list|update|watch|start|stop>")
             return
         subcmd = args[0]
         if subcmd == 'list':
@@ -470,7 +618,10 @@ def main():
         elif subcmd == 'update':
             cmd_all_update()
         elif subcmd == 'watch':
-            cmd_all_watch()
+            bg_scan = '-bg' in args[1:] if len(args) > 1 else False
+            cmd_all_watch(bg_scan=bg_scan)
+        elif subcmd == 'start':
+            cmd_all_start()
         elif subcmd == 'stop':
             cmd_all_stop()
         else:

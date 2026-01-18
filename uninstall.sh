@@ -7,6 +7,26 @@ echo "========================================"
 
 INSTALL_DIR="$HOME/.local/bin/docwire"
 
+# Stop running watchers first
+REGISTRY_FILE="$INSTALL_DIR/dw-registry.txt"
+if [ -f "$REGISTRY_FILE" ]; then
+    echo "Stopping running watchers..."
+    CONTENT=$(cat "$REGISTRY_FILE")
+    if echo "$CONTENT" | grep -q "=x= watchers;"; then
+        RAW=$(echo "$CONTENT" | grep -o '=x= watchers;[^;]*;' | sed 's/=x= watchers;//' | sed 's/;//')
+        IFS='|' read -ra PARTS <<< "$RAW"
+        i=1
+        while [ $i -lt ${#PARTS[@]} ]; do
+            PID_VAL="${PARTS[$i]}"
+            if [ -n "$PID_VAL" ]; then
+                kill "$PID_VAL" 2>/dev/null
+            fi
+            i=$((i+3))
+        done
+    fi
+    echo "Watchers stopped"
+fi
+
 # Remove files
 if [ -d "$INSTALL_DIR" ]; then
     rm -rf "$INSTALL_DIR"

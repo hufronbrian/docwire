@@ -1,0 +1,216 @@
+=== DOCWIRE INSTALLER DOCUMENTATION
+How we built a cross-platform script installer without a package manager
+
+=== OVERVIEW
+
+DocWire uses custom install/uninstall scripts for Windows (PowerShell) and
+Linux/Mac/WSL (Bash). This doc explains the installer behavior and patterns
+that can be reused for other script-based tools.
+
+=== FILE STRUCTURE
+
+docwire/
+  install.ps1      Windows installer
+  install.sh       Linux/Mac/WSL installer
+  uninstall.ps1    Windows uninstaller
+  uninstall.sh     Linux/Mac/WSL uninstaller
+  win/             Windows source files
+    dw.bat         Entry point (calls dwroot.py)
+    dwroot.py      Main script
+    template/      Template copied to .dw/
+  unx/             Linux/Mac/WSL source files
+    dw             Main script (Python with shebang)
+    template/      Template copied to .dw/
+
+=== INSTALL LOCATIONS
+
+Windows:  C:\Users\{user}\bin\docwire\
+Linux:    ~/.local/bin/docwire/
+
+=== INSTALL BEHAVIOR
+
+1. Check dependencies
+   - Python 3.10+
+   - pip
+   - watchdog module
+   - Offer to install missing deps
+
+2. Stop running watchers (if updating)
+   - Parse dw-registry.txt (DWML format)
+   - Kill each registered PID
+   - Clear registry
+   - Track paths for user notification
+
+3. Clean old template (if updating)
+   - Delete template/ folder before copying
+   - Prevents legacy files from persisting
+   - Important: cp/Copy-Item merges, doesn't replace
+
+4. Copy source files
+   - Windows: Copy-Item -Recurse -Force
+   - Linux: cp -r
+
+5. Fix permissions/line endings (Linux only)
+   - chmod +x on main script
+   - sed to convert CRLF to LF
+
+6. Add to PATH
+   - Windows: Modify user PATH env var
+   - Linux: Append to .bashrc or .zshrc
+
+7. Auto-update registered projects
+   - Run: dw all update
+   - Updates .dw/cor/ in all projects
+
+8. Notify user
+   - If watchers were stopped, tell user to run: dw all start
+
+=== UNINSTALL BEHAVIOR
+
+1. Stop running watchers
+   - Same as install: parse registry, kill PIDs
+
+2. Remove install directory
+   - Windows: Remove-Item -Recurse -Force
+   - Linux: rm -rf
+
+3. Remove from PATH
+   - Windows: Filter out install dir from PATH env var
+   - Linux: sed to remove lines from shell config
+
+4. Notify about leftover .dw/ folders
+   - Project .dw/ folders are NOT auto-removed
+   - User can delete manually if desired
+
+=== KEY PATTERNS
+
+---
+Pattern: Dependency checking with optional install
+
+Windows (PowerShell):
+  try {
+      python -c "import watchdog" 2>&1 | Out-Null
+      $hasModule = $true
+  } catch { $hasModule = $false }
+
+  if (-not $hasModule) {
+      $choice = Read-Host "Install now? [y/N]"
+      if ($choice -eq "y") { pip install watchdog }
+  }
+
+Linux (Bash):
+  if ! python3 -c "import watchdog" &> /dev/null; then
+      read -p "Install now? [y/N]: " choice
+      if [ "$choice" = "y" ]; then
+          pip install watchdog
+      fi
+  fi
+
+---
+Pattern: Non-interactive mode (-y flag)
+
+Linux:
+  AUTO_YES=0
+  if [ "$1" = "-y" ]; then AUTO_YES=1; fi
+
+  if [ "$AUTO_YES" -eq 1 ]; then
+      choice="y"
+  else
+      read -p "Install? [y/N]: " choice
+  fi
+
+---
+Pattern: Clean before copy (prevents stale files)
+
+Windows:
+  if (Test-Path $templateDir) {
+      Remove-Item -Path $templateDir -Recurse -Force
+  }
+  Copy-Item -Path "$source\*" -Destination $dest -Recurse -Force
+
+Linux:
+  if [ -d "$INSTALL_DIR/template" ]; then
+      rm -rf "$INSTALL_DIR/template"
+  fi
+  cp -r "$SOURCE_DIR"/* "$INSTALL_DIR/"
+
+---
+Pattern: Add to PATH (idempotent)
+
+Windows:
+  $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  if ($currentPath -notlike "*$installDir*") {
+      [Environment]::SetEnvironmentVariable("Path", "$currentPath;$installDir", "User")
+  }
+
+Linux:
+  PATH_LINE='export PATH="$HOME/.local/bin/docwire:$PATH"'
+  if ! grep -q ".local/bin/docwire" "$SHELL_RC"; then
+      echo "$PATH_LINE" >> "$SHELL_RC"
+  fi
+
+---
+Pattern: Parse DWML registry for PIDs
+
+Windows (PowerShell):
+  if ($content -match '=x=\s*watchers;([^=]*?);\s*=z=') {
+      $raw = $matches[1].Trim()
+      $parts = $raw.Split('|') | Where-Object { $_ }
+      for ($i = 1; $i -lt $parts.Count - 1; $i += 3) {
+          $pid = $parts[$i]
+          taskkill /PID $pid /F
+      }
+  }
+
+Linux (Bash):
+  RAW=$(echo "$CONTENT" | grep -o '=x= watchers;[^;]*;' | sed 's/=x= watchers;//')
+  IFS='|' read -ra PARTS <<< "$RAW"
+  for ((i=1; i<${#PARTS[@]}; i+=3)); do
+      kill "${PARTS[$i]}" 2>/dev/null
+  done
+
+---
+Pattern: Fix Windows line endings in WSL
+
+Linux:
+  sed -i 's/\r$//' "$INSTALL_DIR/dw"
+
+=== GOTCHAS
+
+1. Copy-Item -Recurse -Force MERGES, doesn't replace
+   - Old files persist if not in source
+   - Solution: Delete target folder first
+
+2. Running processes keep old code in memory
+   - Updating files doesn't affect running watchers
+   - Solution: Stop watchers before update, restart after
+
+3. WSL and Windows have separate git/python configs
+   - ~/.gitconfig vs C:\Users\{user}\.gitconfig
+   - Solution: Configure each environment separately
+
+4. PowerShell taskkill vs Linux kill
+   - Windows: taskkill /PID {pid} /F
+   - Linux: kill {pid} or kill -9 {pid}
+
+5. PATH changes need terminal restart
+   - Windows: Close and reopen terminal
+   - Linux: source ~/.bashrc or restart terminal
+
+=== REGISTRY FORMAT (DWML)
+
+Watchers are tracked in dw-registry.txt:
+
+=d=meta=w=
+=x= watchers;|{path1}|{pid1}|{timestamp1}|{path2}|{pid2}|{timestamp2}|; =z=
+=q=meta=e=
+
+Parse with regex: =x=\s*watchers;([^=]*?);\s*=z=
+Split by | to get: path, pid, timestamp (repeating)
+
+=== FUTURE IMPROVEMENTS
+
+- Add version checking (skip install if same version)
+- Add rollback on failed install
+- Add checksum verification
+- Add auto-update checking

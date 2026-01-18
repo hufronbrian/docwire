@@ -34,3 +34,56 @@ Auto-run dw all update after install
 - install.ps1: Run dw all update after copying files
 - install.sh: Same for Linux/Mac/WSL
 - All registered projects get updated cor/ scripts automatically
+
+---
+
+Add dw all watch -bg to scan background processes
+
+- Scans for python processes matching watch/docwire/.dw
+- Windows: Uses PowerShell Get-CimInstance
+- Linux: Uses ps aux
+- May include false positives, for debugging orphan watchers
+
+---
+
+Add dw all start for interactive watcher startup
+
+- Lists registered projects with .dw/ folder
+- Shows which are already running
+- Option 0 to start all, or pick individual projects
+- Skips already running watchers
+
+---
+
+Installer stops watchers before update
+
+- install.ps1/sh: Parse dw-registry.txt, kill registered PIDs
+- Notifies user to run dw all start after install
+- uninstall.ps1/sh: Also stops watchers before removing files
+
+---
+
+Add docs/installer.txt
+
+- Documents install/uninstall behavior
+- Reusable patterns for script-based installers
+- Code snippets for Windows and Linux
+- Common gotchas and DWML registry format
+
+---
+
+Fix dw all start not actually starting watchers
+
+- Changed subprocess call to run dwroot.py directly with 'start' arg
+- Previous approach imported cli module but daemon didn't spawn properly
+- Now calls same path as manual 'dw start' command
+- Fixed for both win/dwroot.py and unx/dw
+
+---
+
+Fix PowerShell reserved variable $pid
+
+- Changed $pid to $procId in install.ps1 and uninstall.ps1
+- $pid is reserved in PowerShell (returns current process ID)
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>

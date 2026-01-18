@@ -112,6 +112,38 @@ fi
 mkdir -p "$INSTALL_DIR"
 echo "Install directory: $INSTALL_DIR"
 
+# Stop running watchers before update
+WATCHER_PATHS=""
+STOPPED_COUNT=0
+if [ -x "$INSTALL_DIR/dw" ]; then
+    echo "Checking for running watchers..."
+    REGISTRY_FILE="$INSTALL_DIR/dw-registry.txt"
+    if [ -f "$REGISTRY_FILE" ]; then
+        # Parse DWML format and kill watchers
+        CONTENT=$(cat "$REGISTRY_FILE")
+        if echo "$CONTENT" | grep -q "=x= watchers;"; then
+            # Extract PIDs and paths
+            RAW=$(echo "$CONTENT" | grep -o '=x= watchers;[^;]*;' | sed 's/=x= watchers;//' | sed 's/;//')
+            IFS='|' read -ra PARTS <<< "$RAW"
+            i=0
+            while [ $i -lt ${#PARTS[@]} ]; do
+                if [ -n "${PARTS[$i]}" ] && [ -n "${PARTS[$((i+1))]}" ]; then
+                    PATH_VAL="${PARTS[$i]}"
+                    PID_VAL="${PARTS[$((i+1))]}"
+                    WATCHER_PATHS="$WATCHER_PATHS$PATH_VAL|"
+                    kill "$PID_VAL" 2>/dev/null && STOPPED_COUNT=$((STOPPED_COUNT+1))
+                fi
+                i=$((i+3))
+            done
+            # Clear registry
+            echo "" > "$REGISTRY_FILE"
+        fi
+    fi
+    if [ $STOPPED_COUNT -gt 0 ]; then
+        echo "Stopped $STOPPED_COUNT watcher(s)"
+    fi
+fi
+
 # Copy files (clean template first to remove legacy files)
 echo "Copying files..."
 if [ -d "$INSTALL_DIR/template" ]; then
@@ -161,6 +193,13 @@ if [ -x "$INSTALL_DIR/dw" ]; then
     echo ""
     echo "Updating registered projects..."
     "$INSTALL_DIR/dw" all update
+fi
+
+# Notify user to restart watchers
+if [ $STOPPED_COUNT -gt 0 ]; then
+    echo ""
+    echo "NOTE: $STOPPED_COUNT watcher(s) were stopped for update."
+    echo "Run 'dw all start' to restart them."
 fi
 
 echo ""
