@@ -5,7 +5,8 @@ DocWire Archive - Move history to acv/ folder
 from pathlib import Path
 from utils import (
     get_dw_path, read_config, read_loc, write_loc,
-    get_timestamp, get_timestamp_compact, get_stem
+    get_timestamp, get_timestamp_compact, get_stem,
+    path_to_storage_name
 )
 
 
@@ -114,8 +115,15 @@ def cmd_archive(args):
             return
 
         file_arg = args[idx + 1]
-        stem = Path(file_arg).stem
-        loc_path = dw_path / 'loc' / f'{stem}.txt'
+        file_path = Path(file_arg)
+
+        # Get storage name - support both direct path and storage name
+        if file_path.exists():
+            storage_name = path_to_storage_name(file_path)
+        else:
+            storage_name = file_path.stem
+
+        loc_path = dw_path / 'loc' / f'{storage_name}.txt'
 
         if not loc_path.exists():
             print(f"No history found for: {file_arg}")

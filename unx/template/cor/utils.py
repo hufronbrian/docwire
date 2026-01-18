@@ -507,10 +507,53 @@ def get_timestamp_compact():
     return datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
 
 
-def get_txt_files(folder=None):
-    """List all .txt files in folder (default: current directory)"""
+def get_txt_files(folder=None, recursive=True):
+    """List all .txt files in folder (default: current directory)
+
+    Args:
+        folder: Base folder to search (default: cwd)
+        recursive: If True, search subfolders too (default: True)
+    """
     folder = Path(folder) if folder else Path.cwd()
-    return [f for f in folder.glob("*.txt") if f.is_file()]
+    pattern = "**/*.txt" if recursive else "*.txt"
+    return [f for f in folder.glob(pattern) if f.is_file() and '.dw' not in f.parts]
+
+
+def path_to_storage_name(file_path):
+    """Convert file path to safe storage name for snp/ and loc/ folders.
+
+    Replaces path separators with double underscores.
+    Example: ./sub/folder/doc.txt -> sub__folder__doc.txt
+    """
+    file_path = Path(file_path)
+    try:
+        rel = file_path.relative_to(Path.cwd())
+    except ValueError:
+        rel = file_path
+
+    # Get parts without the filename
+    parts = list(rel.parts[:-1])
+    stem = rel.stem
+
+    if parts:
+        # Join folder parts with double underscore
+        folder_prefix = '__'.join(parts)
+        return f"{folder_prefix}__{stem}"
+    else:
+        return stem
+
+
+def storage_name_to_path(storage_name):
+    """Convert storage name back to relative path.
+
+    Example: sub__folder__doc -> ./sub/folder/doc.txt
+    """
+    parts = storage_name.split('__')
+    if len(parts) > 1:
+        folder_path = '/'.join(parts[:-1])
+        return f"./{folder_path}/{parts[-1]}.txt"
+    else:
+        return f"./{parts[0]}.txt"
 
 
 def read_file(path):

@@ -6,7 +6,8 @@ from pathlib import Path
 from utils import (
     get_dw_path, get_txt_files, read_file, read_config,
     read_loc, write_loc, write_index,
-    get_timestamp, get_relative_path, get_stem
+    get_timestamp, get_relative_path, get_stem,
+    path_to_storage_name, storage_name_to_path
 )
 from head import has_header, parse_header
 
@@ -74,8 +75,8 @@ def do_sync(silent=False):
             continue
 
         fields = parse_header(content)
-        stem = get_stem(txt_file)
-        loc_path = loc_folder / f'{stem}.txt'
+        storage_name = path_to_storage_name(txt_file)
+        loc_path = loc_folder / f'{storage_name}.txt'
 
         if not loc_path.exists():
             # File has header but no loc/*.txt - skip (needs dw init)
@@ -110,8 +111,13 @@ def do_sync(silent=False):
 
     # Check for orphan loc files
     for loc_path in loc_folder.glob('*.txt'):
-        stem = loc_path.stem
-        txt_path = Path.cwd() / f'{stem}.txt'
+        storage_name = loc_path.stem
+        # Skip archived files (contain timestamp suffix)
+        if '-' in storage_name and len(storage_name.split('-')[-1]) == 15:
+            continue
+        # Convert storage name back to path
+        txt_rel = storage_name_to_path(storage_name)
+        txt_path = Path.cwd() / txt_rel.lstrip('./')
         if not txt_path.exists():
             issues += 1
 
@@ -122,8 +128,8 @@ def do_sync(silent=False):
             continue
 
         fields = parse_header(content)
-        stem = get_stem(txt_file)
-        loc_path = loc_folder / f'{stem}.txt'
+        storage_name = path_to_storage_name(txt_file)
+        loc_path = loc_folder / f'{storage_name}.txt'
 
         if not loc_path.exists():
             continue

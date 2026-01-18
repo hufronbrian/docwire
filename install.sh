@@ -1,8 +1,15 @@
 #!/bin/bash
 # DocWire Installer for Linux/Mac/WSL
 # Run: ./install.sh
+# Run: ./install.sh -y  (skip prompts, auto-install deps)
 
 set -e
+
+# Parse flags
+AUTO_YES=0
+if [ "$1" = "-y" ] || [ "$1" = "--yes" ]; then
+    AUTO_YES=1
+fi
 
 echo "DocWire Installer (Linux/Mac/WSL)"
 echo "========================================"
@@ -12,7 +19,11 @@ if ! command -v python3 &> /dev/null; then
     echo ""
     echo "ERROR: Python3 not found"
     echo ""
-    read -p "Install python3 now? [y/N]: " choice
+    if [ "$AUTO_YES" -eq 1 ]; then
+        choice="y"
+    else
+        read -p "Install python3 now? [y/N]: " choice
+    fi
     if [ "$choice" = "y" ] || [ "$choice" = "Y" ]; then
         sudo apt install -y python3
     else
@@ -42,7 +53,11 @@ if [ "$HAS_PIP" -eq 0 ]; then
     echo ""
     echo "pip not found"
     echo ""
-    read -p "Install python3-pip now? [y/N]: " choice
+    if [ "$AUTO_YES" -eq 1 ]; then
+        choice="y"
+    else
+        read -p "Install python3-pip now? [y/N]: " choice
+    fi
     if [ "$choice" = "y" ] || [ "$choice" = "Y" ]; then
         sudo apt install -y python3-pip
     else
@@ -63,7 +78,11 @@ if ! python3 -c "import watchdog" &> /dev/null; then
     echo ""
     echo "watchdog module not found"
     echo ""
-    read -p "Install python3-watchdog now? [y/N]: " choice
+    if [ "$AUTO_YES" -eq 1 ]; then
+        choice="y"
+    else
+        read -p "Install python3-watchdog now? [y/N]: " choice
+    fi
     if [ "$choice" = "y" ] || [ "$choice" = "Y" ]; then
         sudo apt install -y python3-watchdog
     else
@@ -93,8 +112,12 @@ fi
 mkdir -p "$INSTALL_DIR"
 echo "Install directory: $INSTALL_DIR"
 
-# Copy files
+# Copy files (clean template first to remove legacy files)
 echo "Copying files..."
+if [ -d "$INSTALL_DIR/template" ]; then
+    rm -rf "$INSTALL_DIR/template"
+    echo "Cleaned old template/"
+fi
 cp -r "$SOURCE_DIR"/* "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/dw"
 

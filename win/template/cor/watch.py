@@ -15,14 +15,37 @@ if str(_script_dir) not in sys.path:
     sys.path.insert(0, str(_script_dir))
 
 from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
+
+
+def is_wsl():
+    """Check if running in WSL"""
+    try:
+        with open('/proc/version', 'r') as f:
+            return 'microsoft' in f.read().lower()
+    except:
+        return False
+
+
+def needs_polling(path):
+    """Check if path needs polling instead of inotify.
+
+    Returns True only for WSL + Windows filesystem paths.
+    - Linux native: inotify works fine
+    - Mac: FSEvents works fine
+    - WSL + Linux path (~/*): inotify works
+    - WSL + Windows path (/mnt/*): needs polling
+    """
+    return is_wsl() and str(path).startswith('/mnt/')
+
 
 from utils import (
     get_dw_path, get_timestamp, get_timestamp_compact,
     read_file, write_file, read_loc, write_loc,
     read_session_log, write_session_log,
     read_registry, write_registry,
-    get_relative_path, get_stem
+    get_relative_path, get_stem, path_to_storage_name
 )
 from head import has_header, parse_header, update_file_field, get_field
 from diff import calc_diff, has_changes
@@ -78,7 +101,7 @@ class DWEventHandler(FileSystemEventHandler):
     def _process_save(self, file_path):
         """Process file save: calc diff, update loc/*.txt, update snp/"""
         file_path = Path(file_path)
-        stem = get_stem(file_path)
+        storage_name = path_to_storage_name(file_path)
 
         # Read current content
         current_content = read_file(file_path)
@@ -91,12 +114,12 @@ class DWEventHandler(FileSystemEventHandler):
         header_fields = parse_header(current_content)
         header_version = header_fields.get('version', 'av1r1')
 
-        # Read snapshot
-        snp_path = self.dw_path / 'snp' / file_path.name
+        # Read snapshot (use storage name for subfolder support)
+        snp_path = self.dw_path / 'snp' / f'{storage_name}.txt'
         snp_content = read_file(snp_path)
 
         # Check for rebase
-        loc_path = self.dw_path / 'loc' / f'{stem}.txt'
+        loc_path = self.dw_path / 'loc' / f'{storage_name}.txt'
         loc_data = read_loc(loc_path)
         loc_version = loc_data.get('meta', {}).get('version', 'av1r1')
 
@@ -164,16 +187,16 @@ class DWEventHandler(FileSystemEventHandler):
     def _process_create(self, file_path):
         """Process new file: create snp/, loc/*.txt"""
         file_path = Path(file_path)
-        stem = get_stem(file_path)
+        storage_name = path_to_storage_name(file_path)
 
-        # Copy to snapshot
+        # Copy to snapshot (use storage name for subfolder support)
         content = read_file(file_path)
-        snp_path = self.dw_path / 'snp' / file_path.name
+        snp_path = self.dw_path / 'snp' / f'{storage_name}.txt'
         write_file(snp_path, content)
 
         # Create loc/*.txt
         ts = get_timestamp()
-        loc_path = self.dw_path / 'loc' / f'{stem}.txt'
+        loc_path = self.dw_path / 'loc' / f'{storage_name}.txt'
         loc_data = {
             'meta': {
                 'file': get_relative_path(file_path),
@@ -196,18 +219,18 @@ class DWEventHandler(FileSystemEventHandler):
         """Process file move/rename: rename snp/, loc/, log rename"""
         src_path = Path(src_path)
         dest_path = Path(dest_path)
-        src_stem = get_stem(src_path)
-        dest_stem = get_stem(dest_path)
+        src_storage = path_to_storage_name(src_path)
+        dest_storage = path_to_storage_name(dest_path)
 
-        # Rename snapshot
-        snp_src = self.dw_path / 'snp' / src_path.name
-        snp_dest = self.dw_path / 'snp' / dest_path.name
+        # Rename snapshot (use storage names for subfolder support)
+        snp_src = self.dw_path / 'snp' / f'{src_storage}.txt'
+        snp_dest = self.dw_path / 'snp' / f'{dest_storage}.txt'
         if snp_src.exists():
             snp_src.rename(snp_dest)
 
         # Rename loc/*.txt
-        loc_src = self.dw_path / 'loc' / f'{src_stem}.txt'
-        loc_dest = self.dw_path / 'loc' / f'{dest_stem}.txt'
+        loc_src = self.dw_path / 'loc' / f'{src_storage}.txt'
+        loc_dest = self.dw_path / 'loc' / f'{dest_storage}.txt'
         if loc_src.exists():
             loc_src.rename(loc_dest)
 
@@ -372,9 +395,14 @@ def start_watcher_foreground():
     signal.signal(signal.SIGTERM, signal_handler)
 
     # Start observer
+    # Use PollingObserver for WSL + Windows filesystem since inotify doesn't work there
     event_handler = DWEventHandler()
-    observer = Observer()
-    observer.schedule(event_handler, str(watch_path), recursive=False)
+    if needs_polling(watch_path):
+        observer = PollingObserver(timeout=1)
+        print("Using polling mode (WSL + Windows filesystem)")
+    else:
+        observer = Observer()
+    observer.schedule(event_handler, str(watch_path), recursive=True)
     observer.start()
 
     # Start atomic poll for missed changes

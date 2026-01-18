@@ -103,8 +103,13 @@ if (-not (Test-Path $installDir)) {
     Write-Host "Updating existing installation..."
 }
 
-# Copy files
+# Copy files (clean template first to remove legacy files)
 Write-Host "Copying files..."
+$templateDir = Join-Path $installDir "template"
+if (Test-Path $templateDir) {
+    Remove-Item -Path $templateDir -Recurse -Force
+    Write-Host "Cleaned old template/"
+}
 Copy-Item -Path "$sourceDir\*" -Destination $installDir -Recurse -Force
 Write-Host "Copied win/ to $installDir"
 

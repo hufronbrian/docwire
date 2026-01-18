@@ -6,7 +6,8 @@ from pathlib import Path
 from utils import (
     get_dw_path, get_txt_files, read_file, write_file, read_config,
     read_loc, write_loc, write_index, ensure_folders,
-    get_timestamp, get_timestamp_compact, get_relative_path, get_stem
+    get_timestamp, get_timestamp_compact, get_relative_path, get_stem,
+    path_to_storage_name, storage_name_to_path
 )
 from head import has_header, add_header, parse_header
 from sync import parse_refs, get_ref_versions, do_sync
@@ -33,21 +34,26 @@ def scan_issues():
 
     # Check each loc/*.txt
     for loc_path in loc_folder.glob('*.txt'):
-        stem = loc_path.stem
+        storage_name = loc_path.stem
 
         # Skip timestamped backup files (like myfile-20260115-121951.txt)
-        if '-' in stem and len(stem.split('-')[-1]) == 15:
+        if '-' in storage_name and len(storage_name.split('-')[-1]) == 15:
             continue
 
-        txt_path = Path.cwd() / f'{stem}.txt'
+        # Convert storage name back to path for subfolder support
+        txt_rel = storage_name_to_path(storage_name)
+        txt_path = Path.cwd() / txt_rel.lstrip('./')
         loc_data = read_loc(loc_path)
+
+        # Get display name from metadata or storage name
+        display_name = loc_data.get('meta', {}).get('file', txt_rel)
 
         # [AF] ORPHAN - loc exists but txt deleted
         if not txt_path.exists():
             issues.append({
                 'type': 'ORPHAN',
                 'tag': 'AF',
-                'file': f'{stem}.txt (loc)',
+                'file': f'{display_name} (loc)',
                 'detail': 'no .txt found',
                 'fixable': True,
                 'loc_path': loc_path
@@ -60,7 +66,7 @@ def scan_issues():
             issues.append({
                 'type': 'LARGE',
                 'tag': 'AF',
-                'file': f'{stem}.txt',
+                'file': display_name,
                 'detail': f'{len(history)} entries',
                 'fixable': True,
                 'loc_path': loc_path
@@ -97,7 +103,7 @@ def scan_issues():
             issues.append({
                 'type': 'STALE',
                 'tag': 'MF',
-                'file': f'{stem}.txt',
+                'file': display_name,
                 'detail': f'refs changed: {", ".join(stale_names)}',
                 'fixable': False
             })
@@ -107,7 +113,7 @@ def scan_issues():
             issues.append({
                 'type': 'BROKEN',
                 'tag': 'MF',
-                'file': f'{stem}.txt',
+                'file': display_name,
                 'detail': f'refs not found: {", ".join(broken_names)}',
                 'fixable': False
             })
@@ -185,18 +191,19 @@ def do_sync_repair(silent=False):
         if not has_header(content):
             continue
 
-        stem = get_stem(txt_file)
+        storage_name = path_to_storage_name(txt_file)
+        rel_path = get_relative_path(txt_file)
 
-        # Create snp if missing
-        snp_path = dw_path / 'snp' / txt_file.name
+        # Create snp if missing (use storage name for subfolder support)
+        snp_path = dw_path / 'snp' / f'{storage_name}.txt'
         if not snp_path.exists():
             write_file(snp_path, content)
             if not silent:
-                print(f"[+] Created snp: {txt_file.name}")
+                print(f"[+] Created snp: {rel_path}")
             repaired += 1
 
         # Create loc if missing
-        loc_path = dw_path / 'loc' / f'{stem}.txt'
+        loc_path = dw_path / 'loc' / f'{storage_name}.txt'
         if not loc_path.exists():
             fields = parse_header(content)
             ts = get_timestamp()
@@ -212,7 +219,7 @@ def do_sync_repair(silent=False):
             }
             write_loc(loc_path, loc_data)
             if not silent:
-                print(f"[+] Created loc: {stem}.txt")
+                print(f"[+] Created loc: {rel_path}")
             repaired += 1
 
     # Run sync to update metadata
@@ -235,17 +242,19 @@ def do_remove_orphans(silent=False):
     removed = 0
 
     for loc_path in loc_folder.glob('*.txt'):
-        stem = loc_path.stem
+        storage_name = loc_path.stem
         # Skip already-removed files (have timestamp in name)
-        if '-' in stem and len(stem.split('-')[-1]) == 15:
+        if '-' in storage_name and len(storage_name.split('-')[-1]) == 15:
             continue
 
-        txt_path = Path.cwd() / f'{stem}.txt'
+        # Convert storage name to path for subfolder support
+        txt_rel = storage_name_to_path(storage_name)
+        txt_path = Path.cwd() / txt_rel.lstrip('./')
         if not txt_path.exists():
             # Only remove loc, keep snp for recovery
             loc_path.unlink()
             if not silent:
-                print(f"[-] Removed orphan: {stem}.txt")
+                print(f"[-] Removed orphan: {txt_rel}")
             removed += 1
 
     if not silent and removed > 0:
@@ -258,22 +267,28 @@ def do_remove_orphans(silent=False):
 def do_remove_file(file_arg, silent=False):
     """Remove specific file from tracking"""
     dw_path = get_dw_path()
-    stem = Path(file_arg).stem
+    file_path = Path(file_arg)
     ts = get_timestamp_compact()
+
+    # Get storage name - support both direct path and storage name
+    if file_path.exists():
+        storage_name = path_to_storage_name(file_path)
+    else:
+        storage_name = file_path.stem
 
     removed = False
 
     # Rename snapshot (keep as backup)
-    snp_path = dw_path / 'snp' / f'{stem}.txt'
+    snp_path = dw_path / 'snp' / f'{storage_name}.txt'
     if snp_path.exists():
-        snp_new = dw_path / 'snp' / f'{stem}-{ts}.txt'
+        snp_new = dw_path / 'snp' / f'{storage_name}-{ts}.txt'
         snp_path.rename(snp_new)
         removed = True
 
     # Rename loc (keep as backup)
-    loc_path = dw_path / 'loc' / f'{stem}.txt'
+    loc_path = dw_path / 'loc' / f'{storage_name}.txt'
     if loc_path.exists():
-        loc_new = dw_path / 'loc' / f'{stem}-{ts}.txt'
+        loc_new = dw_path / 'loc' / f'{storage_name}-{ts}.txt'
         loc_path.rename(loc_new)
         removed = True
 

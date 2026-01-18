@@ -1,29 +1,22 @@
-feat: Initial release - DocWire v1.0
+Add recursive folder tracking and WSL polling mode
 
-Git for docs, but automatic.
-Per-file versioning for plain .txt files.
+- Add recursive=True to watchdog observer for subfolder tracking
+- Add path_to_storage_name() and storage_name_to_path() helpers
+  - ./sub/folder/doc.txt -> sub__folder__doc (double underscore encoding)
+- Update all scripts to use storage names: cli.py, watch.py, sync.py, fix.py, archive.py, atomic.py
+- Add is_wsl() and needs_polling() detection for WSL + Windows filesystem
+- Use PollingObserver when running on WSL with /mnt/* paths (inotify doesn't work there)
+- Add -y flag to install.sh for non-interactive installs
+- get_txt_files() now recursive by default
 
-- Save = auto-diff
-- Bump = commit
-- Zero learning curve
+Tested on WSL2 with both Windows (/mnt/c/) and Linux (~/) filesystems.
 
-Features:
-- Automatic change tracking on save
-- Per-file version history (not whole repo)
-- DWML v1.0 format (escape-free markup)
-- Background watcher process
-- Cross-platform (Windows, Linux, Mac, WSL)
+---
 
-Commands:
-- dw setup, dw start, dw stop
-- dw bump, dw status, dw track
-- dw fix, dw archive, dw compact
+Fix installer not cleaning old template files
 
-Uses DWML (DontWorry Markup Language) for all internal data.
-No escaping needed for special characters.
+- install.ps1: Delete template/ folder before copying to remove legacy .py files at root
+- install.sh: Same fix for Linux/Mac/WSL installer
+- Fixes issue where old scripts persisted at .dw/ root instead of only in .dw/cor/
 
-Fork encouraged - make it your own.
-
-Licensed under GPLX-XBasic (Fairware)
-- LICENSE: Base terms
-- FAIRNESS.txt: Contribution tiers
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>

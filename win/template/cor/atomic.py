@@ -8,7 +8,7 @@ import os
 import time
 import threading
 from pathlib import Path
-from utils import get_dw_path, read_file, get_txt_files, get_stem
+from utils import get_dw_path, read_file, get_txt_files, get_stem, path_to_storage_name
 from head import has_header
 
 
@@ -57,7 +57,9 @@ def check_file(txt_path):
     dw_path = get_dw_path()
     txt_path = Path(txt_path)
 
-    snp_path = dw_path / 'snp' / txt_path.name
+    # Use storage name for subfolder support
+    storage_name = path_to_storage_name(txt_path)
+    snp_path = dw_path / 'snp' / f'{storage_name}.txt'
 
     if not snp_path.exists():
         return False

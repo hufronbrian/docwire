@@ -11,7 +11,8 @@ from utils import (
     get_dw_path, get_txt_files, ensure_folders,
     read_file, write_file, read_config, read_loc, write_loc,
     read_index, write_index, read_session_log,
-    get_timestamp, get_timestamp_compact, get_relative_path, get_stem
+    get_timestamp, get_timestamp_compact, get_relative_path, get_stem,
+    path_to_storage_name, storage_name_to_path
 )
 from head import has_header, add_header, parse_header, update_file_field, get_field
 from bump import increment_r, parse_version
@@ -65,18 +66,19 @@ def cmd_init():
         content = read_file(txt_file)
         if not has_header(content):
             add_header(txt_file)
-            print(f"[+] Added header: {txt_file.name}")
+            rel_path = get_relative_path(txt_file)
+            print(f"[+] Added header: {rel_path}")
 
         # Read content again (with header)
         content = read_file(txt_file)
-        stem = get_stem(txt_file)
+        storage_name = path_to_storage_name(txt_file)
 
-        # Copy to snapshot
-        snp_path = dw_path / 'snp' / txt_file.name
+        # Copy to snapshot (use storage name for subfolder support)
+        snp_path = dw_path / 'snp' / f'{storage_name}.txt'
         write_file(snp_path, content)
 
         # Create loc/*.txt
-        loc_path = dw_path / 'loc' / f'{stem}.txt'
+        loc_path = dw_path / 'loc' / f'{storage_name}.txt'
         if not loc_path.exists():
             fields = parse_header(content)
             ts = get_timestamp()
@@ -122,10 +124,10 @@ def init_file(txt_file):
     if not has_header(content):
         return False
 
-    stem = get_stem(txt_file)
+    storage_name = path_to_storage_name(txt_file)
 
-    # Create loc/*.txt if not exists
-    loc_path = dw_path / 'loc' / f'{stem}.txt'
+    # Create loc/*.txt if not exists (use storage name for subfolder support)
+    loc_path = dw_path / 'loc' / f'{storage_name}.txt'
     if not loc_path.exists():
         fields = parse_header(content)
         ts = get_timestamp()
@@ -369,9 +371,16 @@ def cmd_track(args):
         print("Please specify a file")
         return
 
-    # Find the file
-    stem = Path(file_arg).stem
-    loc_path = dw_path / 'loc' / f'{stem}.txt'
+    # Find the file - support both direct path and storage name lookup
+    file_path = Path(file_arg)
+    if file_path.exists():
+        # File exists, use its path to find storage name
+        storage_name = path_to_storage_name(file_path)
+    else:
+        # Try as storage name or stem
+        storage_name = Path(file_arg).stem
+
+    loc_path = dw_path / 'loc' / f'{storage_name}.txt'
 
     if not loc_path.exists():
         print(f"No history found for: {file_arg}")
@@ -380,9 +389,10 @@ def cmd_track(args):
     loc_data = read_loc(loc_path)
 
     if show_all:
-        # Show all paths
-        txt_path = Path.cwd() / f'{stem}.txt'
-        snp_path = dw_path / 'snp' / f'{stem}.txt'
+        # Show all paths - get actual txt path from loc metadata
+        txt_rel = loc_data.get('meta', {}).get('file', f'./{storage_name}.txt')
+        txt_path = Path.cwd() / txt_rel.lstrip('./')
+        snp_path = dw_path / 'snp' / f'{storage_name}.txt'
         print(f"txt: {txt_path}")
         print(f"loc: {loc_path}")
         print(f"snp: {snp_path}")
@@ -394,8 +404,9 @@ def cmd_track(args):
         return
 
     if show_txt:
-        # Show txt content
-        txt_path = Path.cwd() / f'{stem}.txt'
+        # Show txt content - get actual path from loc metadata
+        txt_rel = loc_data.get('meta', {}).get('file', f'./{storage_name}.txt')
+        txt_path = Path.cwd() / txt_rel.lstrip('./')
         if txt_path.exists():
             print(read_file(txt_path))
         else:
@@ -404,7 +415,7 @@ def cmd_track(args):
 
     # Default: show history summary
     meta = loc_data.get('meta', {})
-    print(f"File: {meta.get('file', stem + '.txt')}")
+    print(f"File: {meta.get('file', storage_name + '.txt')}")
     print(f"Version: {meta.get('version', 'unknown')}")
     print(f"Saves: {meta.get('saves', 0)}")
     print(f"Updated: {meta.get('updated', 'unknown')}")
@@ -464,19 +475,25 @@ def cmd_remove(args):
         return
 
     file_arg = args[idx + 1]
-    stem = Path(file_arg).stem
+    file_path = Path(file_arg)
     ts = get_timestamp_compact()
 
+    # Get storage name - support both direct path and storage name
+    if file_path.exists():
+        storage_name = path_to_storage_name(file_path)
+    else:
+        storage_name = file_path.stem
+
     # Rename snapshot
-    snp_path = dw_path / 'snp' / f'{stem}.txt'
+    snp_path = dw_path / 'snp' / f'{storage_name}.txt'
     if snp_path.exists():
-        snp_new = dw_path / 'snp' / f'{stem}-{ts}.txt'
+        snp_new = dw_path / 'snp' / f'{storage_name}-{ts}.txt'
         snp_path.rename(snp_new)
 
     # Rename loc/*.txt
-    loc_path = dw_path / 'loc' / f'{stem}.txt'
+    loc_path = dw_path / 'loc' / f'{storage_name}.txt'
     if loc_path.exists():
-        loc_new = dw_path / 'loc' / f'{stem}-{ts}.txt'
+        loc_new = dw_path / 'loc' / f'{storage_name}-{ts}.txt'
         loc_path.rename(loc_new)
         print(f"Removed from tracking: {file_arg}")
     else:
